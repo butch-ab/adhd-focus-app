@@ -322,6 +322,7 @@
     let ctx = null, master, sceneGain, sceneFilter, rainGain, stems = {}, started = false, muted = false, mode = 'synth';
     let scene = 'concert', loopStart = 0, scheduled = 0, timer = null;
     let storm = null;   // the street and the room leaking in during the flood
+    let focused = false, flooded = false;   // room only: holding the Walkman pulls the music forward and pushes the noise back
 
     const N = { A2: 110, C3: 130.81, D3: 146.83, E3: 164.81, F3: 174.61, G3: 196, A3: 220, B3: 246.94, C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392, A4: 440, B4: 493.88, C5: 523.25, F2: 87.31, G2: 98, E2: 82.41 };
     const CHORDS = [[N.A3, N.C4, N.E4], [N.F3, N.A3, N.C4], [N.C4, N.E4, N.G4], [N.G3, N.B3, N.D4]];   // Am F C G
@@ -483,7 +484,7 @@
       }
       storm = { bus, timers, nodes: [wind, wlfo, wlfo2] };
       talker(); later(talker, 500); later(talker, 1200); later(car, 600); later(clatter, 900);
-      ramp(bus.gain, 0.9, 1.5);
+      ramp(bus.gain, focused ? 0.18 : 0.9, 1.5);
     }
     function stormStop(fast) {
       if (!storm) return;
@@ -502,24 +503,32 @@
       loopStart = ctx.currentTime + 0.05; scheduled = 0; tick(); timer = setInterval(tick, 250);
       applyScene();
     }
-    function applyScene() {
+    function applyScene(tc) {
       if (!ctx) return;
-      if (scene === 'concert') { ramp(sceneGain.gain, 1, 0.4); ramp(sceneFilter.frequency, 20000, 0.4); ramp(rainGain.gain, 0, 0.6); }
-      else { ramp(sceneGain.gain, 0.28, 0.6); ramp(sceneFilter.frequency, 1100, 0.6); ramp(rainGain.gain, 0.10, 1.2); }
+      if (scene === 'concert') { ramp(sceneGain.gain, 1, 0.4); ramp(sceneFilter.frequency, 20000, 0.4); ramp(rainGain.gain, 0, 0.6); return; }
+      // The room. Thin and far by default, thinner in the flood, and forward while you're holding the Walkman.
+      const t = tc || 0.6;
+      if (focused) { ramp(sceneGain.gain, 0.8, t); ramp(sceneFilter.frequency, 7000, t); ramp(rainGain.gain, 0.04, t); }
+      else if (flooded) { ramp(sceneGain.gain, 0.16, t); ramp(sceneFilter.frequency, 700, t); ramp(rainGain.gain, 0.10, t); }
+      else { ramp(sceneGain.gain, 0.28, t); ramp(sceneFilter.frequency, 1100, t); ramp(rainGain.gain, 0.10, t); }
+      if (storm) ramp(storm.bus.gain, focused ? 0.18 : 0.9, focused ? 0.25 : 0.5);
     }
     return {
       start,
       get started() { return started; }, get mode() { return mode; },
-      setScene(s) { scene = s; applyScene(); },
+      setScene(s) { scene = s; focused = false; flooded = false; applyScene(); },
+      // Room only. On while the lens is held on the Walkman; off the moment it lifts or the ring is taken.
+      focus(on) { if (!ctx || on === focused) return; focused = on; if (scene === 'room') applyScene(on ? 0.22 : 0.35); },
       hold(key) { if (!ctx) return; KEYS.forEach(k => { const on = !key || k === key; ramp(stems[k].gain.gain, on ? 1 : 0.25); ramp(stems[k].filter.frequency, on ? 20000 : 800); }); },
-      walkmanHeld(on) { if (!ctx || scene !== 'concert' && !on) { applyScene(); return; } if (!ctx) return; ramp(sceneGain.gain, on ? 0.6 : 0.28, 0.5); ramp(sceneFilter.frequency, on ? 2600 : 1100, 0.5); },
-      flood(on) { if (!ctx) return; if (on && scene === 'room') { ramp(sceneGain.gain, 0.16, 0.8); ramp(sceneFilter.frequency, 700, 0.8); stormStart(); } else { if (scene === 'room') { ramp(sceneGain.gain, 0.28, 0.8); ramp(sceneFilter.frequency, 1100, 0.8); } stormStop(false); } },
+      walkmanHeld(on) { if (!ctx) return; if (on) { focused = true; flooded = false; stormStop(false); applyScene(0.5); } else { focused = false; applyScene(0.5); } },
+      flood(on) { if (!ctx) return; flooded = on && scene === 'room'; if (flooded) stormStart(); else stormStop(false); if (scene === 'room') applyScene(0.8); },
       wobble(key, amount) { if (!ctx || !stems[key]) return; stems[key].lfoGain.gain.setTargetAtTime(amount * 0.006, ctx.currentTime, 0.05); },
       thought() { if (!ctx) return; noise(ctx.currentTime, 0.018, 'bandpass', 2400, 2, 0.35, master); },
       ending() { if (!ctx) return; stormStop(true); const t = ctx.currentTime; noise(t, 0.012, 'lowpass', 1200, 1, 0.5, master); noise(t + 0.09, 0.02, 'lowpass', 800, 1, 0.4, master); ramp(sceneGain.gain, 0.0001, 0.35); ramp(rainGain.gain, 0.16, 1.5); },
       restart() { scene = 'concert'; stormStop(true); applyScene(); this.hold(null); },
       toggleMute() { muted = !muted; if (master) ramp(master.gain, muted ? 0 : 0.9, 0.05); return muted; },
       get muted() { return muted; },
+      debug() { return { focused, flooded, storm: !!storm, scene, mode }; },
     };
   })();
 </script>
@@ -1026,6 +1035,9 @@
       if (u >= 1) { const done = ringAnim.done; ringAnim = null; done(); }
     }
 
+    // In the room, the music comes forward only while the lens is actually held on the Walkman.
+    if (scene === 'room') audio.focus(holding && onTarget && !stolen && !held && !busy);
+
     drawRope(); drawRing(); drawStreaks();
     const speed = Math.hypot(vel.x, vel.y);
     const settled = speed < 0.05 && Math.hypot(anchor.x - puckPos.x, anchor.y - puckPos.y) < 0.5 && !inField && !ringAnim && !thoughts.some(t => t.moving);
@@ -1050,7 +1062,7 @@
   lens.addEventListener('pointermove', e => { if (!holding) return; const p = framePoint(e); pointerPos = { x: p.x - grabOffset.x, y: p.y - grabOffset.y }; });
   function release(e) {
     if (!holding) return;
-    holding = false;
+    holding = false; if (scene === 'room') audio.focus(false);
     lens.classList.remove('grabbed');
     try { lens.releasePointerCapture(e.pointerId); } catch {}
     wake();
