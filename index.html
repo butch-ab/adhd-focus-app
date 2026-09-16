@@ -1,0 +1,1014 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Front Row Focus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800&family=Public+Sans:ital,wght@0,400;0,500;1,400&display=swap">
+<style>
+  :root {
+    --night: #0E0A16; --sil: #1A1327; --spot: #F2A93B; --held: #3FD1C4; --hard: #E5484D;
+    --ink: #F3EEE6; --thought: #ECE8EE; --thought-ink: #1B1523; --thought-meta: #6B6478;
+    --spot-rgb: 242,169,59; --held-rgb: 63,209,196; --hard-rgb: 229,72,77; --ink-rgb: 243,238,230;
+    --title: 'Big Shoulders Display', 'Barlow Condensed', Impact, 'Arial Narrow', sans-serif;
+    --body: 'Public Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --ui: cubic-bezier(.2,.8,.2,1); --zoom: cubic-bezier(.6,0,.2,1);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--night); color: var(--ink); font: 400 15px/1.45 var(--body); overflow: hidden; }
+  #arena { position: fixed; inset: 0; background: var(--night); touch-action: none; user-select: none; -webkit-user-select: none; }
+  #frame { position: absolute; top: 0; bottom: 0; left: 50%; transform: translateX(-50%); width: min(100vw, 480px); overflow: clip; background: var(--night); }
+
+  /* ---- Scenes ------------------------------------------------------------ */
+  .scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #room { z-index: 0; opacity: 0; transition: opacity 1s var(--ui) .6s; }
+  #arena.in-room #room { opacity: 1; }
+  #roomVeil { position: absolute; left: 50%; top: 50%; width: 260vmax; height: 260vmax; margin: -130vmax 0 0 -130vmax; z-index: 1; pointer-events: none;
+    background: radial-gradient(circle, var(--night) 0 24%, rgba(14,10,22,0) 42%); transform: scale(1); opacity: 0; }
+  #arena.zooming-out #roomVeil { opacity: 1; animation: veil 1s var(--zoom) .6s both; }
+  @keyframes veil { from { transform: scale(1); opacity: 1; } to { transform: scale(0); opacity: 0; } }
+  #concert { position: absolute; inset: 0; z-index: 2; transform-origin: 0 0; clip-path: inset(0 round 0px); background: var(--night);
+    transition: transform 1.2s var(--zoom), clip-path 1.2s var(--zoom), filter 1.2s var(--ui); }
+  #arena.in-room #concert { filter: brightness(.4); pointer-events: none; transition: transform 1.2s var(--zoom), clip-path 1.2s var(--zoom), filter 1.2s var(--ui); }
+  #arena.in-room.walkman-held #concert { filter: brightness(1); }
+  #arena.zooming-in #concert { transition-duration: 1.2s; }
+  .member, .cone, .scenery { transition: opacity .4s var(--ui); }
+  #stage.held .member:not(.target) { opacity: .35; }
+  #stage.held .cone:not(.target) { opacity: .2; }
+  #stage.held .haze { opacity: .5; }
+  #room.held .scenery { opacity: .4; }
+  #room.held #walkBody { stroke: var(--held); }
+  #room.held #walkReels circle { stroke: #8A8194; }
+  .rain { animation: rain 1.8s linear infinite; }
+  @keyframes rain { to { transform: translateY(60px); } }
+  #secondHand { transform-box: fill-box; transform-origin: 50% 100%; animation: tick 60s steps(60) infinite; }
+  @keyframes tick { to { transform: rotate(360deg); } }
+  #catTail { transform-box: fill-box; transform-origin: 100% 100%; animation: tail 20s ease-in-out infinite; }
+  @keyframes tail { 0%, 94%, 100% { transform: rotate(0); } 97% { transform: rotate(-14deg); } }
+
+  /* ---- Effects layer: rope, ring, field ------------------------------------- */
+  #fx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 4; pointer-events: none; overflow: visible; transition: opacity .4s var(--ui); }
+  #ropeCore { fill: none; stroke: var(--ink); stroke-opacity: .5; stroke-width: 2; stroke-linecap: round; transition: stroke .4s var(--ui), stroke-opacity .4s var(--ui); }
+  #ropeDash { fill: none; stroke: var(--spot); stroke-opacity: .35; stroke-width: 6; stroke-linecap: round; stroke-dasharray: 1 9; transition: stroke-opacity .4s var(--ui); }
+  #fx.taut #ropeDash { stroke-opacity: 0; }
+  #fx.hardfield #ropeCore { stroke: var(--hard); stroke-opacity: .85; }
+  #fx.heldrope #ropeCore { stroke: var(--held); stroke-opacity: .5; }
+  #ring { transition: opacity .2s var(--ui); }
+  #ring circle { fill: none; }
+  #ringRest { stroke: var(--spot); stroke-opacity: .5; stroke-width: 2; stroke-dasharray: 4 8; }
+  #ringTrace { stroke: var(--spot); stroke-opacity: .55; stroke-width: 1.5; }
+  #ringFill { stroke: var(--held); stroke-width: 4; stroke-linecap: round; transform: rotate(-90deg); }
+  #ringHalo { stroke: var(--held); stroke-opacity: .35; stroke-width: 1; }
+  #ringFlash { stroke: #fff; stroke-width: 3; opacity: 0; }
+  #ring.flash #ringFlash { animation: flash .08s linear 1; }
+  @keyframes flash { from { opacity: 1; } to { opacity: 0; } }
+  #field { opacity: 0; transition: opacity .4s var(--ui); }
+  #field circle { fill: none; stroke: var(--hard); }
+  #field.on { opacity: 1; }
+  #field .spin { animation: spin 18s linear infinite; transform-box: fill-box; transform-origin: 50% 50%; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #streaks line { stroke: var(--hard); stroke-linecap: round; }
+  #concertLens { opacity: 0; }
+
+  /* ---- Lens ---------------------------------------------------------------- */
+  #lens { position: absolute; width: 88px; height: 88px; margin: -44px 0 0 -44px; z-index: 6; border-radius: 50%; cursor: grab; touch-action: none; will-change: left, top; }
+  #lens .body { position: absolute; inset: 0; border-radius: 50%; border: 3px solid var(--spot);
+    --c: var(--spot-rgb);
+    background: radial-gradient(circle at 35% 30%, rgba(var(--ink-rgb),.22), rgba(var(--c),.08) 60%, rgba(var(--c),.14));
+    box-shadow: 0 0 0 6px rgba(var(--c),.12), 0 10px 30px rgba(var(--c),.25);
+    transition: border-color .4s var(--ui), box-shadow .4s var(--ui); animation: breathe 2.4s ease-in-out infinite; }
+  #lens.grabbed { cursor: grabbing; } #lens.grabbed .body { animation: none; }
+  #lens.hard .body { --c: var(--hard-rgb); border-color: var(--hard); animation: shake .083s linear infinite; }
+  #lens.held .body { --c: var(--held-rgb); border-color: var(--held); animation: none; }
+  #lens.hidden { opacity: 0; pointer-events: none; transition: opacity .3s; }
+  @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
+  @keyframes shake { 0%, 100% { transform: translate(0,0); } 25% { transform: translate(2px,-1px); } 50% { transform: translate(-2px,1px); } 75% { transform: translate(1px,2px); } }
+  #arena.busy #lens, #arena.ending #lens { pointer-events: none; }
+
+  /* ---- Toggle + title -------------------------------------------------------- */
+  #toggle { position: absolute; top: 22px; left: 0; right: 0; display: flex; justify-content: center; z-index: 7; transition: opacity .4s var(--ui); }
+  #toggle .pill { display: flex; background: rgba(var(--ink-rgb),.08); border: 1px solid rgba(var(--ink-rgb),.14); border-radius: 999px; padding: 3px; }
+  #toggle button { padding: 9px 18px; border: 0; border-radius: 999px; background: transparent; color: rgba(var(--ink-rgb),.6);
+    font: 500 12px/1 var(--body); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; transition: background .22s var(--ui), color .22s var(--ui), box-shadow .12s; }
+  #toggle button[data-level="easy"][aria-pressed="true"] { background: var(--spot); color: var(--night); }
+  #toggle button[data-level="hard"][aria-pressed="true"] { background: var(--hard); color: var(--ink); }
+  #toggle button[data-level="easy"]:active { box-shadow: 0 0 0 3px rgba(var(--spot-rgb),.35); }
+  #toggle button[data-level="hard"]:active { box-shadow: 0 0 0 3px rgba(var(--hard-rgb),.35); }
+  #toggle button:focus-visible { outline: 2px solid var(--held); outline-offset: 2px; }
+  #toggle button[aria-disabled="true"] { color: rgba(var(--ink-rgb),.28); cursor: not-allowed; }
+  #arena.in-room #toggle { opacity: .4; }
+  #arena.zooming-out #toggle, #arena.zooming-out #titleBlock, #arena.ending #toggle, #arena.ending #titleBlock, #arena.ending #lens, #arena.ending #fx, #arena.ending #timer { opacity: 0; transition: opacity .4s var(--ui); }
+  #titleBlock { position: absolute; top: 92px; left: 28px; right: 28px; z-index: 7; pointer-events: none; transition: opacity .4s var(--ui); }
+  #title { margin: 0; font: 800 64px/.92 var(--title); text-transform: uppercase; letter-spacing: .005em; color: var(--ink); text-wrap: pretty; transition: color .4s var(--ui); }
+  #title.multi { font-size: 56px; }
+  #title.cut { transition: none; }
+  #arena.held-state #title { color: var(--held); }
+  #hint { margin: 14px 0 0; font: 400 15px/1.45 var(--body); color: rgba(var(--ink-rgb),.66); transition: opacity .16s var(--ui); min-height: 1.45em; }
+  #hint.swap { opacity: 0; }
+  #timer { position: absolute; left: 0; right: 0; bottom: 36px; text-align: center; font: 400 13px/1.4 var(--body); color: rgba(var(--hard-rgb),.8); z-index: 7; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #timer.on { opacity: 1; }
+  #mute { position: absolute; top: 22px; right: 16px; width: 44px; height: 44px; z-index: 7; border-radius: 50%; border: 1px solid rgba(var(--ink-rgb),.14);
+    background: rgba(var(--ink-rgb),.08); color: rgba(var(--ink-rgb),.7); display: grid; place-items: center; cursor: pointer; transition: opacity .4s var(--ui); }
+  #mute .x { display: none; } #mute[aria-pressed="true"] .wave { display: none; } #mute[aria-pressed="true"] .x { display: block; }
+  #mute:focus-visible { outline: 2px solid var(--held); outline-offset: 2px; }
+  #arena.in-room #mute { opacity: .4; } #arena.zooming-out #mute, #arena.ending #mute { opacity: 0; }
+
+  /* ---- Thought bubbles ---------------------------------------------------------- */
+  .thought { position: absolute; z-index: 5; width: 280px; max-width: calc(100% - 32px); display: flex; align-items: center; gap: 14px; padding: 16px 22px 16px 14px;
+    background: var(--thought); color: var(--thought-ink); pointer-events: none; border-radius: 30px;
+    box-shadow: 0 18px 40px rgba(0,0,0,.5), inset 0 2px 0 rgba(255,255,255,.55), inset 0 -3px 0 rgba(0,0,0,.05);
+    transform: translate(-50%, -50%); animation: cardIn .32s cubic-bezier(.2,.8,.2,1.35) both; }
+  .thought.static { animation: cardIn .32s cubic-bezier(.2,.8,.2,1.35) both, drift 3.6s ease-in-out .32s infinite alternate; }
+  /* Cloud bumps along the top edge, drawn behind the body with solid box-shadow copies. */
+  .thought::before { content: ""; position: absolute; z-index: -1; width: 46px; height: 46px; border-radius: 50%; top: -16px; left: 34px; background: var(--thought);
+    box-shadow: 64px 4px 0 6px var(--thought), 128px -2px 0 -2px var(--thought), 178px 8px 0 -8px var(--thought); }
+  /* Trailing puffs toward you. */
+  .thought::after { content: ""; position: absolute; width: 16px; height: 16px; border-radius: 50%; left: 26px; bottom: -16px; background: var(--thought);
+    box-shadow: -14px 16px 0 -4px var(--thought), 0 8px 16px rgba(0,0,0,.35); }
+  .thought.pop { animation: cardOut .16s var(--ui) both; }
+  @keyframes cardIn { from { transform: translate(-50%, -40%) scale(.85); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+  @keyframes drift { from { translate: 0 0; } to { translate: 4px -6px; } }
+  @keyframes cardOut { to { transform: translate(-50%, -60%) scale(.85); opacity: 0; filter: blur(2px); } }
+  .thought .disc { position: relative; flex: none; width: 48px; height: 48px; border-radius: 50%; background: #DCD6E0; border: 2px dotted var(--thought-meta); }
+  .thought.ring .disc { border-color: var(--held); }
+  .thought .disc svg { position: absolute; inset: -2px; transform: rotate(-90deg); }
+  .thought .disc circle { fill: none; stroke: var(--held); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 132; stroke-dashoffset: 132; }
+  .thought .text { font: 500 16px/1.3 var(--body); text-wrap: pretty; min-width: 0; }
+
+  /* ---- Held panel ------------------------------------------------------------- */
+  #panel { position: absolute; left: 16px; right: 16px; bottom: 16px; z-index: 8; padding: 20px 22px 22px; border-radius: 20px;
+    background: rgba(14,10,22,.92); border: 1px solid rgba(var(--held-rgb),.45); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    opacity: 0; transform: translateY(24px); pointer-events: none; transition: opacity .32s var(--ui), transform .32s var(--ui); }
+  #panel.show { opacity: 1; transform: none; pointer-events: auto; }
+  #panel .label { font: 500 11px/1 var(--body); letter-spacing: .14em; color: var(--held); margin-bottom: 10px; }
+  #panel .bodytext { font: 400 16px/1.45 var(--body); color: var(--ink); text-wrap: pretty; }
+  #panel .aside { margin-top: 12px; font: italic 400 13px/1.4 var(--body); color: rgba(var(--ink-rgb),.5); }
+  #panel .aside[hidden], #panel .actions[hidden] { display: none; }
+  #panel .actions { margin-top: 16px; display: flex; }
+  #panel button { padding: 16px 22px; border: 0; border-radius: 999px; background: var(--held); color: var(--night); font: 500 15px/1 var(--body); cursor: pointer; }
+  #panel button:focus-visible { outline: 2px solid var(--spot); outline-offset: 2px; }
+  #panel .suggest { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(var(--ink-rgb),.1); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+  #panel .suggest[hidden] { display: none; }
+  #panel .suggest p { margin: 0; font: 400 14px/1.4 var(--body); color: rgba(var(--ink-rgb),.66); }
+  #panel .suggest button { flex: none; padding: 12px 18px; background: var(--hard); color: var(--ink); }
+
+  /* ---- Ending ---------------------------------------------------------------- */
+  #ending { position: absolute; inset: 0; z-index: 9; display: none; }
+  #ending.show { display: block; }
+  #endDim { position: absolute; inset: 0; background: var(--night); opacity: 0; transition: opacity 1.2s var(--ui); }
+  #ending.show #endDim { opacity: .65; }
+  #endText { position: absolute; left: 28px; right: 28px; top: 35%; display: flex; flex-direction: column; gap: 22px; }
+  #endTitle { margin: 0; font: 800 44px/.95 var(--title); text-transform: uppercase; color: var(--ink); }
+  #endLines { display: flex; flex-direction: column; gap: 12px; font: 400 17px/1.5 var(--body); color: rgba(var(--ink-rgb),.78); text-wrap: pretty; }
+  #ending .line { opacity: 0; transform: translateY(6px); transition: opacity .4s var(--ui), transform .4s var(--ui); }
+  #ending .line.in { opacity: 1; transform: none; }
+  #ending .reveal { margin-top: 10px; color: var(--ink); }
+  #again { position: absolute; left: 50%; bottom: 48px; width: 88px; height: 88px; margin-left: -44px; border-radius: 50%; border: 3px solid var(--spot);
+    background: rgba(var(--spot-rgb),.1); color: var(--spot); font: 500 12px/1 var(--body); letter-spacing: .08em; cursor: pointer;
+    opacity: 0; transform: translateY(24px); transition: opacity .4s var(--ui), transform .4s var(--ui); }
+  #again.in { opacity: 1; transform: none; }
+  #again:focus-visible { outline: 2px solid var(--held); outline-offset: 2px; }
+
+  /* ---- Interstitials ------------------------------------------------------------ */
+  #inter { position: absolute; inset: 0; z-index: 8; display: none; background: rgba(14,10,22,.55); cursor: pointer; }
+  #inter.show { display: block; }
+  #interText { position: absolute; left: 28px; right: 28px; top: 30%; margin: 0; text-align: center; font: 400 21px/1.45 var(--body); color: var(--ink);
+    text-wrap: pretty; opacity: 0; transform: translateY(8px); transition: opacity .5s var(--ui), transform .5s var(--ui); }
+  #interTap { position: absolute; left: 0; right: 0; bottom: 48px; text-align: center; font: 500 11px/1 var(--body); letter-spacing: .14em; color: rgba(var(--ink-rgb),.5);
+    opacity: 0; transition: opacity .4s var(--ui); }
+  #inter.in #interText, #inter.in #interTap { opacity: 1; transform: none; }
+  #arena.intro #toggle, #arena.intro #titleBlock, #arena.intro #lens, #arena.intro #fx, #arena.intro #timer { opacity: 0; }
+  #arena.intro #lens { pointer-events: none; }
+  #arena.inter-open #titleBlock, #arena.inter-open #toggle { opacity: 0; }
+  #room { transition: opacity 1s var(--ui) .6s, filter 1.2s var(--ui); }
+  #arena.flood #room { filter: brightness(.7); }
+  #arena.flood #titleBlock { opacity: .5; }
+  #concert.still, #room.still, #roomVeil.still { transition: none !important; }
+
+  /* The held instrument plays. */
+  .member.playing { animation: play .46s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: 50% 100%; }
+  @keyframes play { from { transform: scaleY(1) translateY(0); } to { transform: scaleY(1.045) translateY(-3px); } }
+  .member.playing { filter: drop-shadow(0 0 10px rgba(var(--held-rgb),.55)); }
+  #waves { opacity: 0; transition: opacity .4s var(--ui); }
+  #waves.on { opacity: 1; }
+  #waves circle { fill: none; stroke: var(--held); stroke-width: 2; transform-box: fill-box; transform-origin: 50% 50%; animation: wave 1.8s ease-out infinite; }
+  #waves circle:nth-child(2) { animation-delay: .6s; } #waves circle:nth-child(3) { animation-delay: 1.2s; }
+  @keyframes wave { from { transform: scale(.7); opacity: .7; } to { transform: scale(2.6); opacity: 0; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    #lens .body, .rain, #secondHand, #catTail, #field .spin, .member.playing, #waves circle { animation: none !important; }
+    #waves circle { opacity: .4; }
+    #concert, #room, #roomVeil, #panel, #ending .line, #again { transition-duration: .01s !important; animation-duration: .01s !important; }
+    .thought, .thought.static { animation: cardIn .01s both; }
+  }
+</style>
+</head>
+<body>
+<div id="arena">
+<div id="frame">
+  <!-- Room -->
+  <svg id="room" class="scene" viewBox="0 0 400 860" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <linearGradient id="rbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#120d1c"/><stop offset="1" stop-color="#0b0812"/></linearGradient>
+      <radialGradient id="lamp" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#f2a93b" stop-opacity=".5"/><stop offset="1" stop-color="#f2a93b" stop-opacity="0"/></radialGradient>
+      <linearGradient id="lcone" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2a93b" stop-opacity=".35"/><stop offset="1" stop-color="#f2a93b" stop-opacity="0"/></linearGradient>
+      <linearGradient id="desk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a2a3a"/><stop offset=".08" stop-color="#241a2c"/><stop offset="1" stop-color="#120c18"/></linearGradient>
+      <radialGradient id="hazeR" cx=".5" cy=".55" r=".5"><stop offset="0" stop-color="#f2a93b" stop-opacity=".28"/><stop offset="1" stop-color="#f2a93b" stop-opacity="0"/></radialGradient>
+      <clipPath id="winClip"><rect x="30" y="96" width="132" height="172" rx="6"/></clipPath>
+    </defs>
+    <rect width="400" height="860" fill="url(#rbg)"/><ellipse class="scenery" cx="320" cy="470" rx="230" ry="260" fill="url(#lamp)"/>
+    <g class="scenery">
+      <rect x="30" y="96" width="132" height="172" rx="6" fill="#151a2a" stroke="#28213a" stroke-width="3"/>
+      <g clip-path="url(#winClip)"><g class="rain" stroke="#3a4560" stroke-width="1.5" stroke-linecap="round" opacity=".7">
+        <line x1="50" y1="50" x2="46" y2="74"/><line x1="78" y1="90" x2="74" y2="116"/><line x1="120" y1="44" x2="116" y2="66"/><line x1="140" y1="140" x2="136" y2="170"/><line x1="60" y1="150" x2="56" y2="186"/><line x1="108" y1="170" x2="104" y2="198"/><line x1="150" y1="70" x2="147" y2="90"/>
+        <line x1="50" y1="110" x2="46" y2="134"/><line x1="78" y1="150" x2="74" y2="176"/><line x1="120" y1="104" x2="116" y2="126"/><line x1="140" y1="200" x2="136" y2="230"/><line x1="60" y1="210" x2="56" y2="246"/><line x1="108" y1="230" x2="104" y2="258"/><line x1="150" y1="130" x2="147" y2="150"/>
+        <line x1="40" y1="230" x2="36" y2="254"/><line x1="92" y1="250" x2="88" y2="270"/><line x1="130" y1="260" x2="126" y2="280"/></g></g>
+      <line x1="96" y1="96" x2="96" y2="268" stroke="#28213a" stroke-width="3"/><line x1="30" y1="182" x2="162" y2="182" stroke="#28213a" stroke-width="3"/>
+    </g>
+    <g class="scenery">
+      <circle cx="332" cy="130" r="26" fill="#130e1c" stroke="#2c2438" stroke-width="3"/><line x1="332" y1="130" x2="332" y2="113" stroke="#8a8194" stroke-width="2"/><line x1="332" y1="130" x2="343" y2="137" stroke="#8a8194" stroke-width="2"/>
+      <line id="secondHand" x1="332" y1="134" x2="332" y2="108" stroke="#e5484d" stroke-width="1"/>
+    </g>
+    <g class="scenery"><polygon points="300,360 360,360 378,412 282,412" fill="#e3922c"/><polygon points="282,412 378,412 420,560 240,560" fill="url(#lcone)"/><rect x="327" y="412" width="6" height="148" fill="#1a1322"/></g>
+    <rect x="0" y="560" width="400" height="300" fill="url(#desk)"/>
+    <g class="scenery"><path d="M44 640 A 46 46 0 0 1 136 640" fill="none" stroke="#3a3148" stroke-width="7" stroke-linecap="round"/><ellipse cx="44" cy="646" rx="12" ry="18" fill="#2a2236"/><ellipse cx="136" cy="646" rx="12" ry="18" fill="#2a2236"/><path d="M136 660 Q 150 700 130 720" fill="none" stroke="#3a3148" stroke-width="3"/></g>
+    <g class="scenery" fill="#09070d"><ellipse cx="315" cy="650" rx="50" ry="22"/><circle cx="352" cy="628" r="16"/><polygon points="340,616 344,600 352,614"/><polygon points="358,614 366,600 364,616"/><path id="catTail" d="M266 652 Q 240 640 250 618" fill="none" stroke="#09070d" stroke-width="7" stroke-linecap="round"/></g>
+    <g id="walkman">
+      <rect id="walkBody" x="125" y="580" width="150" height="100" rx="10" fill="#2b2536" stroke="#3c3450" stroke-width="2" style="transition: stroke .4s"/>
+      <rect x="145" y="598" width="110" height="54" rx="6" fill="#130d1c"/><rect x="145" y="598" width="110" height="54" rx="6" fill="url(#hazeR)" opacity=".8"/>
+      <g id="walkReels"><circle cx="172" cy="625" r="12" fill="none" stroke="#6a6180" stroke-width="3"/><circle cx="228" cy="625" r="12" fill="none" stroke="#6a6180" stroke-width="3"/></g>
+      <rect x="150" y="660" width="22" height="10" rx="2" fill="#3c3450"/><rect x="178" y="660" width="22" height="10" rx="2" fill="#3c3450"/><rect x="206" y="660" width="22" height="10" rx="2" fill="#3c3450"/>
+    </g>
+  </svg>
+  <div id="roomVeil"></div>
+
+  <!-- Concert -->
+  <div id="concert">
+    <svg id="stage" class="scene" viewBox="0 0 400 860" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <defs>
+        <linearGradient id="sbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#160f24"/><stop offset=".6" stop-color="#0e0a16"/><stop offset="1" stop-color="#07050c"/></linearGradient>
+        <linearGradient id="cone" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2a93b" stop-opacity=".55"/><stop offset="1" stop-color="#f2a93b" stop-opacity="0"/></linearGradient>
+        <radialGradient id="haze" cx=".5" cy=".55" r=".5"><stop offset="0" stop-color="#f2a93b" stop-opacity=".28"/><stop offset="1" stop-color="#f2a93b" stop-opacity="0"/></radialGradient>
+        <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a1e3a"/><stop offset="1" stop-color="#140e1e"/></linearGradient>
+      </defs>
+      <rect width="400" height="860" fill="url(#sbg)"/><ellipse class="haze" cx="200" cy="430" rx="260" ry="200" fill="url(#haze)" style="transition: opacity .4s"/>
+      <polygon class="cone" data-cone="left" points="60,-10 100,-10 190,510 0,510" fill="url(#cone)" opacity=".7"/>
+      <polygon class="cone" data-cone="centre" points="180,-10 220,-10 300,510 100,510" fill="url(#cone)"/>
+      <polygon class="cone" data-cone="right" points="300,-10 340,-10 400,510 210,510" fill="url(#cone)" opacity=".7"/>
+      <rect x="0" y="500" width="400" height="44" fill="url(#floor)"/><rect x="0" y="544" width="400" height="6" fill="#0a0710"/>
+      <g fill="#1a1327">
+        <g class="member" data-key="guitar"><circle cx="70" cy="412" r="13"/><rect x="54" y="428" width="32" height="70" rx="12"/><rect x="46" y="452" width="62" height="13" rx="6" transform="rotate(-24 77 458)"/></g>
+        <g class="member" data-key="bass"><circle cx="135" cy="416" r="13"/><rect x="119" y="432" width="32" height="68" rx="12"/><rect x="110" y="460" width="66" height="12" rx="6" transform="rotate(-18 143 466)"/></g>
+        <g class="member" data-key="drums"><circle cx="200" cy="392" r="12"/><rect x="186" y="407" width="28" height="42" rx="10"/><ellipse cx="163" cy="437" rx="17" ry="7"/><ellipse cx="237" cy="437" rx="17" ry="7"/><rect x="146" y="437" width="34" height="26"/><rect x="220" y="437" width="34" height="26"/><circle cx="200" cy="474" r="30"/><ellipse cx="128" cy="410" rx="22" ry="5"/><line x1="128" y1="410" x2="140" y2="500" stroke="#1a1327" stroke-width="3"/><ellipse cx="270" cy="404" rx="20" ry="5"/><line x1="270" y1="404" x2="262" y2="500" stroke="#1a1327" stroke-width="3"/></g>
+        <g class="member" data-key="keys"><circle cx="278" cy="416" r="13"/><rect x="262" y="432" width="32" height="60" rx="12"/><rect x="246" y="470" width="72" height="12" rx="3"/><rect x="250" y="482" width="4" height="18"/><rect x="310" y="482" width="4" height="18"/></g>
+        <g class="member" data-key="voice"><circle cx="335" cy="404" r="14"/><rect x="318" y="421" width="34" height="80" rx="13"/><line x1="358" y1="396" x2="358" y2="500" stroke="#1a1327" stroke-width="3"/><circle cx="358" cy="392" r="6"/></g>
+      </g>
+      <g fill="#06040a"><ellipse cx="-10" cy="800" rx="120" ry="150"/><ellipse cx="90" cy="860" rx="90" ry="130"/><ellipse cx="410" cy="790" rx="130" ry="160"/><ellipse cx="320" cy="870" rx="90" ry="140"/><ellipse cx="60" cy="640" rx="34" ry="40"/><ellipse cx="60" cy="700" rx="60" ry="50"/><ellipse cx="350" cy="655" rx="32" ry="38"/><ellipse cx="350" cy="710" rx="58" ry="46"/></g>
+      <g id="concertLens"><path id="concertRope" fill="none" stroke="#e5484d" stroke-opacity=".7" stroke-width="2"/><circle id="concertLensDot" r="44" fill="none" stroke="#e5484d" stroke-width="3" opacity=".8"/></g>
+    </svg>
+  </div>
+
+  <!-- Effects: rope, ring, field -->
+  <svg id="fx" aria-hidden="true">
+    <path id="ropeCore"/><path id="ropeDash"/>
+    <g id="field"><g class="spin"><circle id="f1" r="46" stroke-width="3" stroke-dasharray="16 10" opacity=".95"/></g><g class="spin"><circle id="f2" r="80" stroke-width="1" stroke-dasharray="3 9" opacity=".45"/></g><g class="spin"><circle id="f3" r="120" stroke-width="1" stroke-dasharray="2 12" opacity=".25"/></g></g>
+    <g id="streaks"></g>
+    <g id="waves"><circle r="40"/><circle r="40"/><circle r="40"/></g>
+    <g id="ring"><circle id="ringRest" r="56"/><circle id="ringTrace" r="60"/><circle id="ringHalo" r="72"/><circle id="ringFill" r="60"/><circle id="ringFlash" r="60"/></g>
+  </svg>
+
+  <div id="lens" role="button" aria-label="Lens"><div class="body"></div></div>
+
+  <div id="toggle"><div class="pill" role="group" aria-label="Difficulty">
+    <button type="button" data-level="easy" aria-pressed="true">Easy</button>
+    <button type="button" data-level="hard" aria-pressed="false">Hard</button>
+  </div></div>
+  <div id="titleBlock"><h1 id="title">The drums</h1><p id="hint">Pull the lens up. Keep it there.</p></div>
+  <div id="timer">0:07</div>
+  <button type="button" id="mute" aria-label="Sound on" aria-pressed="false"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path class="spk" d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path class="wave" d="M16 8.5a4.5 4.5 0 0 1 0 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path class="wave" d="M18.5 6a8 8 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path class="x" d="M16 9l5 6M21 9l-5 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+
+  <div id="panel" role="status">
+    <div class="label">HELD</div>
+    <div class="bodytext" id="panelBody"></div>
+    <div class="aside" id="panelAside">Let go and it all comes back.</div>
+    <div class="actions" id="panelActions" hidden><button type="button" id="headphones">Put the headphones on</button></div>
+    <div class="suggest" id="panelSuggest" hidden><p>That was Easy. Most nights aren’t.</p><button type="button" id="tryHard">Try it on Hard</button></div>
+  </div>
+
+  <div id="inter" role="dialog" aria-live="polite"><p id="interText"></p><div id="interTap">TAP TO CONTINUE</div></div>
+
+  <div id="ending">
+    <div id="endDim"></div>
+    <div id="endText">
+      <h2 id="endTitle" class="line">That was one song.</h2>
+      <div id="endLines"><div class="line" id="endLine1"></div><div class="line">Some nights it takes more. Some nights the tape runs out first.</div><div class="line">The music was good, either way.</div><div class="line reveal">For a lot of people with ADHD, this is every night. You just played one song of it.</div></div>
+    </div>
+    <button type="button" id="again">AGAIN</button>
+  </div>
+</div>
+</div>
+
+<script>
+  // =====================================================================================
+  // Audio. One gain + low-pass per instrument, a synthesized placeholder band, and a stem
+  // loader. Drop five files at audio/stems/{drums,bass,guitar,keys,voice}.mp3 (same length,
+  // same start) and they replace the synth automatically. Nothing plays until a user gesture.
+  // =====================================================================================
+  const audio = (() => {
+    const KEYS = ['drums', 'bass', 'guitar', 'keys', 'voice'];
+    const STEM_URLS = Object.fromEntries(KEYS.map(k => [k, `audio/stems/${k}.mp3`]));
+    const BPM = 96, BEAT = 60 / BPM, BARS = 4, LOOP = BARS * 4 * BEAT;
+    let ctx = null, master, sceneGain, sceneFilter, rainGain, stems = {}, started = false, muted = false, mode = 'synth';
+    let scene = 'concert', loopStart = 0, scheduled = 0, timer = null, wobbleTargets = {};
+
+    const N = { A2: 110, C3: 130.81, D3: 146.83, E3: 164.81, F3: 174.61, G3: 196, A3: 220, B3: 246.94, C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392, A4: 440, B4: 493.88, C5: 523.25, F2: 87.31, G2: 98, E2: 82.41 };
+    const CHORDS = [[N.A3, N.C4, N.E4], [N.F3, N.A3, N.C4], [N.C4, N.E4, N.G4], [N.G3, N.B3, N.D4]];   // Am F C G
+    const BASS   = [[N.A2, N.A2, N.E3, N.A2, N.A2, N.G2, N.E3, N.C3], [N.F2, N.F2, N.C3, N.F2, N.F2, N.A2, N.C3, N.E3],
+                    [N.C3, N.C3, N.G2, N.C3, N.C3, N.E3, N.G2, N.A2], [N.G2, N.G2, N.D3, N.G2, N.G2, N.B3 / 2, N.D3, N.E3]];
+    // Melody as [beatOffsetInLoop, freq, beats]
+    const VOICE  = [[0, N.E4, 1], [1, N.G4, .5], [1.5, N.A4, 1.5], [4, N.C5, 1], [5, N.B4, .5], [5.5, N.A4, 1], [6.5, N.G4, 1.5],
+                    [8, N.E4, 1], [9, N.G4, 1], [10, N.A4, 1], [11, N.E4, 1], [12, N.D4, 2]];
+
+    function init() {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      master = ctx.createGain(); master.gain.value = muted ? 0 : 0.9;
+      sceneFilter = ctx.createBiquadFilter(); sceneFilter.type = 'lowpass'; sceneFilter.frequency.value = 20000;
+      sceneGain = ctx.createGain(); sceneGain.gain.value = 1;
+      sceneGain.connect(sceneFilter); sceneFilter.connect(master); master.connect(ctx.destination);
+      KEYS.forEach(k => {
+        const input = ctx.createGain();
+        const delay = ctx.createDelay(0.05); delay.delayTime.value = 0.012;   // pitch wobble = modulated delay
+        const lfo = ctx.createOscillator(); lfo.frequency.value = 6.5; const lfoGain = ctx.createGain(); lfoGain.gain.value = 0;
+        lfo.connect(lfoGain); lfoGain.connect(delay.delayTime); lfo.start();
+        const filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 20000;
+        const gain = ctx.createGain(); gain.gain.value = 1;
+        input.connect(delay); delay.connect(filter); filter.connect(gain); gain.connect(sceneGain);
+        stems[k] = { input, gain, filter, lfoGain };
+      });
+      // Rain: brown noise, band-limited, silent until the room.
+      const buf = ctx.createBuffer(1, ctx.sampleRate * 4, ctx.sampleRate), d = buf.getChannelData(0); let last = 0;
+      for (let i = 0; i < d.length; i++) { const w = Math.random() * 2 - 1; d[i] = (last + 0.02 * w) / 1.02; last = d[i]; d[i] *= 3.5; }
+      const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+      const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 500;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200;
+      rainGain = ctx.createGain(); rainGain.gain.value = 0;
+      src.connect(hp); hp.connect(lp); lp.connect(rainGain); rainGain.connect(master); src.start();
+    }
+
+    // ---- Placeholder band ------------------------------------------------------------------
+    const env = (g, t, a, peak, dec, sus = 0, rel = 0.05, dur = 0) => {
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + a);
+      if (dur) { g.gain.exponentialRampToValueAtTime(Math.max(sus, 0.0001), t + a + dec); g.gain.setValueAtTime(Math.max(sus, 0.0001), t + dur); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + rel); }
+      else g.gain.exponentialRampToValueAtTime(0.0001, t + a + dec);
+    };
+    function noise(t, dur, type, freq, q, peak, out) {
+      const n = ctx.createBufferSource(); const b = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur) + 1, ctx.sampleRate); const dd = b.getChannelData(0);
+      for (let i = 0; i < dd.length; i++) dd[i] = Math.random() * 2 - 1;
+      n.buffer = b; const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q; const g = ctx.createGain();
+      n.connect(f); f.connect(g); g.connect(out); env(g, t, 0.002, peak, dur); n.start(t); n.stop(t + dur + 0.05);
+    }
+    function kick(t) { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.12); o.connect(g); g.connect(stems.drums.input); env(g, t, 0.003, 0.9, 0.22); o.start(t); o.stop(t + 0.3); }
+    function snare(t) { noise(t, 0.16, 'bandpass', 1800, 0.7, 0.45, stems.drums.input); const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'triangle'; o.frequency.setValueAtTime(190, t); o.connect(g); g.connect(stems.drums.input); env(g, t, 0.002, 0.35, 0.1); o.start(t); o.stop(t + 0.15); }
+    function hat(t, open) { noise(t, open ? 0.25 : 0.05, 'highpass', 7000, 1, open ? 0.18 : 0.14, stems.drums.input); }
+    function bass(t, f, dur) { const o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter();
+      o.type = 'sawtooth'; o2.type = 'triangle'; o.frequency.value = f; o2.frequency.value = f; lp.type = 'lowpass'; lp.frequency.value = 520; lp.Q.value = 2;
+      o.connect(lp); o2.connect(lp); lp.connect(g); g.connect(stems.bass.input); env(g, t, 0.01, 0.42, 0.12, 0.28, 0.06, dur); o.start(t); o2.start(t); o.stop(t + dur + 0.1); o2.stop(t + dur + 0.1); }
+    function pluck(t, f, peak = 0.22) { const o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter();
+      o.type = 'sawtooth'; o.frequency.value = f; lp.type = 'lowpass'; lp.frequency.setValueAtTime(3200, t); lp.frequency.exponentialRampToValueAtTime(700, t + 0.35); lp.Q.value = 1.5;
+      o.connect(lp); lp.connect(g); g.connect(stems.guitar.input); env(g, t, 0.004, peak, 0.5); o.start(t); o.stop(t + 0.7); }
+    function pad(t, freqs, dur) { freqs.forEach(f => [-6, 6].forEach(det => { const o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter();
+      o.type = 'triangle'; o.frequency.value = f; o.detune.value = det; lp.type = 'lowpass'; lp.frequency.value = 1400;
+      o.connect(lp); lp.connect(g); g.connect(stems.keys.input); env(g, t, 0.25, 0.09, 0.3, 0.07, 0.3, dur); o.start(t); o.stop(t + dur + 0.4); })); }
+    function sing(t, f, dur, from) { const o = ctx.createOscillator(), g = ctx.createGain(), bp = ctx.createBiquadFilter(), vib = ctx.createOscillator(), vg = ctx.createGain();
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(from || f, t); o.frequency.exponentialRampToValueAtTime(f, t + 0.08);
+      bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 1.2; vib.frequency.value = 5.5; vg.gain.setValueAtTime(0, t); vg.gain.linearRampToValueAtTime(f * 0.012, t + 0.25);
+      vib.connect(vg); vg.connect(o.frequency); o.connect(bp); bp.connect(g); g.connect(stems.voice.input); env(g, t, 0.05, 0.3, 0.1, 0.24, 0.12, dur);
+      o.start(t); vib.start(t); o.stop(t + dur + 0.2); vib.stop(t + dur + 0.2); }
+
+    function scheduleLoop(t0) {
+      for (let bar = 0; bar < BARS; bar++) {
+        const tb = t0 + bar * 4 * BEAT, chord = CHORDS[bar];
+        for (let s = 0; s < 16; s++) {
+          const t = tb + s * BEAT / 4;
+          if (s === 0 || s === 8 || s === 10 || (bar === 3 && s === 6)) kick(t);
+          if (s === 4 || s === 12) snare(t);
+          if (s % 2 === 0) hat(t, s === 14);
+        }
+        BASS[bar].forEach((f, i) => bass(tb + i * BEAT / 2, f, BEAT / 2 * 0.9));
+        [0.5, 1.5, 2.5, 3.5].forEach(b => chord.forEach((f, i) => pluck(tb + b * BEAT + i * 0.02, f * 2, 0.14)));
+        if (bar === 1 || bar === 3) [N.E4, N.G4, N.A4].forEach((f, i) => pluck(tb + (3 + i * 0.33) * BEAT, f * 2, 0.2));
+        pad(tb, chord, 4 * BEAT - 0.05);
+      }
+      let prev = null;
+      VOICE.forEach(([b, f, d]) => { sing(t0 + b * BEAT, f, d * BEAT * 0.95, prev); prev = f; });
+    }
+    function tick() {
+      // Keep one loop scheduled ahead; the band plays until the page closes.
+      while (loopStart + scheduled * LOOP < ctx.currentTime + 1.5) { scheduleLoop(loopStart + scheduled * LOOP); scheduled++; }
+    }
+
+    // ---- Stems ---------------------------------------------------------------------------
+    async function tryStems() {
+      if (location.protocol !== 'http:' && location.protocol !== 'https:') return false;
+      try {
+        const bufs = await Promise.all(KEYS.map(async k => { const r = await fetch(STEM_URLS[k]); if (!r.ok) throw new Error(k); return ctx.decodeAudioData(await r.arrayBuffer()); }));
+        const t = ctx.currentTime + 0.1;
+        KEYS.forEach((k, i) => { const s = ctx.createBufferSource(); s.buffer = bufs[i]; s.loop = true; s.connect(stems[k].input); s.start(t); });
+        return true;
+      } catch { return false; }
+    }
+
+    // ---- Public --------------------------------------------------------------------------
+    const ramp = (param, v, tc = 0.15) => { param.cancelScheduledValues(ctx.currentTime); param.setTargetAtTime(v, ctx.currentTime, tc); };
+    async function start() {
+      if (started) { if (ctx.state === 'suspended') ctx.resume(); return; }
+      started = true; init();
+      if (ctx.state === 'suspended') await ctx.resume();
+      if (await tryStems()) { mode = 'stems'; return; }
+      loopStart = ctx.currentTime + 0.05; scheduled = 0; tick(); timer = setInterval(tick, 250);
+      applyScene();
+    }
+    function applyScene() {
+      if (!ctx) return;
+      if (scene === 'concert') { ramp(sceneGain.gain, 1, 0.4); ramp(sceneFilter.frequency, 20000, 0.4); ramp(rainGain.gain, 0, 0.6); }
+      else { ramp(sceneGain.gain, 0.28, 0.6); ramp(sceneFilter.frequency, 1100, 0.6); ramp(rainGain.gain, 0.10, 1.2); }
+    }
+    return {
+      start,
+      get started() { return started; }, get mode() { return mode; },
+      setScene(s) { scene = s; applyScene(); },
+      hold(key) { if (!ctx) return; KEYS.forEach(k => { const on = !key || k === key; ramp(stems[k].gain.gain, on ? 1 : 0.25); ramp(stems[k].filter.frequency, on ? 20000 : 800); }); },
+      walkmanHeld(on) { if (!ctx || scene !== 'concert' && !on) { applyScene(); return; } if (!ctx) return; ramp(sceneGain.gain, on ? 0.6 : 0.28, 0.5); ramp(sceneFilter.frequency, on ? 2600 : 1100, 0.5); },
+      flood(on) { if (!ctx || scene !== 'room') return; ramp(sceneGain.gain, on ? 0.16 : 0.28, 0.8); ramp(sceneFilter.frequency, on ? 700 : 1100, 0.8); },
+      wobble(key, amount) { if (!ctx || !stems[key]) return; stems[key].lfoGain.gain.setTargetAtTime(amount * 0.006, ctx.currentTime, 0.05); },
+      thought() { if (!ctx) return; noise(ctx.currentTime, 0.018, 'bandpass', 2400, 2, 0.35, master); },
+      ending() { if (!ctx) return; const t = ctx.currentTime; noise(t, 0.012, 'lowpass', 1200, 1, 0.5, master); noise(t + 0.09, 0.02, 'lowpass', 800, 1, 0.4, master); ramp(sceneGain.gain, 0.0001, 0.35); ramp(rainGain.gain, 0.16, 1.5); },
+      restart() { scene = 'concert'; applyScene(); this.hold(null); },
+      toggleMute() { muted = !muted; if (master) ramp(master.gain, muted ? 0 : 0.9, 0.05); return muted; },
+      get muted() { return muted; },
+    };
+  })();
+</script>
+
+<script>
+  // ---- Config ----------------------------------------------------------------
+  const HOLD_MS_CONCERT = 5000;    // ring fill time on stage
+  const HOLD_MS_ROOM    = 4500;    // ring fill time on the Walkman (accumulates across steals once the flood is on)
+  const DISC_MS         = 900;     // holding a thought's disc fills its ring in this long
+  const STRUGGLE_MS     = 9000;    // Hard: fight the magnet this long and the room comes back
+  const STIFFNESS = 0.14, DAMPING = 0.72;
+  const LEVELS = {
+    easy: { tolerance: 34, pullFraction: 0.18, pullMin: 36, tensionCurve: 1.4, heavyAtMax: 0.45,
+            thoughtGap: [1100, 1700], thoughtGrow: 550 },
+    hard: { tolerance: 26, pullFraction: 0.45, pullMin: 80, tensionCurve: 2.2, heavyAtMax: 0.82,
+            magnet: true, magnetRadius: 170, magnetForce: 9, keepOut: 14,
+            thoughtGap: [800, 1300], thoughtGrow: 0 },
+  };
+  const SCENE_W = 400, SCENE_H = 860;
+  // One still thought to learn on. Catch it, and the flood starts: from every side, whether you're holding or not.
+  const PHASES = [
+    { until: 1,        cap: 1, gap: null,       speed: null,      static: true },   // the first one sits and drifts
+    { until: 1,        cap: 3, gap: [500, 900],  speed: [55, 90] },                  // (unused: kept so the sliding phase can be re-enabled by raising `until`)
+    { until: Infinity, cap: 7, gap: [220, 480],  speed: [80, 150], flood: true },
+  ];
+
+  const INSTRUMENTS = {
+    guitar: { title: 'The guitar', hot: [77, 458],  cone: 'left',   body: 'Everything else drops back. The pick on the strings before the note. The rest of the room turns into a hum.' },
+    bass:   { title: 'The bass',   hot: [143, 466], cone: 'left',   body: 'Everything else drops back. Just the low end, walking. The rest of the room turns into a hum.' },
+    drums:  { title: 'The drums',  hot: [200, 470], cone: 'centre', body: 'Everything else drops back. Kick, snare, the hi-hat ticking. The rest of the room turns into a hum.' },
+    keys:   { title: 'The keys',   hot: [282, 476], cone: 'right',  body: 'Everything else drops back. Chords held long, a little out of tune. The rest of the room turns into a hum.' },
+    voice:  { title: 'The voice',  hot: [352, 432], cone: 'right',  body: 'Everything else drops back. A breath, then the line, then the breath again. The rest of the room turns into a hum.' },
+  };
+  const WALKMAN = { title: 'Can you at least focus on the music?', hot: [200, 630], win: { x: 145, y: 598, w: 110, h: 54 }, body: 'The tape’s already running.' };
+  const THOUGHTS = ['Work was hard today.', 'I should send those documents.', 'Don’t forget the doctor’s appointment tomorrow.', 'Did I lock the door?', 'What was that noise?', 'You never replied to her.'];
+
+  // ---- Elements --------------------------------------------------------------
+  const $ = id => document.getElementById(id);
+  const arena = $('arena'), frame = $('frame'), concert = $('concert'), stage = $('stage'), room = $('room');
+  const fx = $('fx'), ropeCore = $('ropeCore'), ropeDash = $('ropeDash'), ring = $('ring'), ringRest = $('ringRest'), ringTrace = $('ringTrace'),
+        ringHalo = $('ringHalo'), ringFill = $('ringFill'), field = $('field'), streaks = $('streaks');
+  const lens = $('lens'), title = $('title'), hint = $('hint'), timer = $('timer');
+  const panel = $('panel'), panelBody = $('panelBody'), panelAside = $('panelAside'), panelActions = $('panelActions'), panelSuggest = $('panelSuggest');
+  const ending = $('ending'), endLine1 = $('endLine1'), again = $('again');
+  const inter = $('inter'), interText = $('interText'), waves = $('waves');
+  const concertLens = $('concertLens'), concertRope = $('concertRope'), concertLensDot = $('concertLensDot');
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const RING_C = 2 * Math.PI * 60;
+  ringFill.style.strokeDasharray = RING_C; ringFill.style.strokeDashoffset = RING_C;
+
+  // ---- State ------------------------------------------------------------------
+  let level = 'easy', easyDone = false;
+  try { easyDone = localStorage.getItem('frf-easy-done') === '1'; if (easyDone && LEVELS[localStorage.getItem('frf-level')]) level = localStorage.getItem('frf-level'); } catch {}
+  let D = LEVELS[level];
+  let scene = 'concert';            // concert | room
+  let busy = false, held = false, holding = false, onTarget = false;
+  let current = 'drums';            // instrument key or 'walkman'
+  let fw = 0, fh = 0, k = 1, ox = 0, oy = 0;   // scene -> frame mapping
+  let homePos = { x: 0, y: 0 }, targetPos = { x: 0, y: 0 }, homeTarget = { x: 0, y: 0 };
+  let puckPos = { x: 0, y: 0 }, pointerPos = { x: 0, y: 0 }, vel = { x: 0, y: 0 }, grabOffset = { x: 0, y: 0 };
+  let tension = 0, maxPull = 80, progress = 0, raf = null, lastT = 0;
+  let inField = false, slipSide = 0, struggleMs = 0, hapticAt = 0, hintedCloser = false;
+  let stolen = false, thoughts = [], spawned = 0, focusMs = 0, nextThoughtAt = 0, thoughtBag = [], grabBacks = 0, misses = 0, ringHomeAt = 0;
+  const HARD_ENDS_AFTER = 5;       // Hard: this many thoughts caught or lost, and the night is over
+  const FLOOD_GRACE_MS = 1300;     // in the flood, the ring can't be taken again this soon after coming home
+  let ringAnim = null, tries = 0, madeIt = false;
+
+  // ---- Helpers ----------------------------------------------------------------
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const toFrame = p => ({ x: ox + p[0] * k, y: oy + p[1] * k });
+  const buzz = p => { if (navigator.vibrate) navigator.vibrate(p); };
+  const place = (el, p) => { el.style.left = p.x + 'px'; el.style.top = p.y + 'px'; };
+  function setHint(text) { if (hint.textContent === text) return; hint.classList.add('swap'); setTimeout(() => { hint.textContent = text; hint.classList.remove('swap'); }, 160); }
+  function setTitle(text, cut) { title.classList.toggle('multi', text.length > 12); if (cut) { title.classList.add('cut'); requestAnimationFrame(() => title.classList.remove('cut')); } title.textContent = text; }
+
+  function layout() {
+    const r = frame.getBoundingClientRect();
+    fw = r.width; fh = r.height;
+    k = Math.max(fw / SCENE_W, fh / SCENE_H);
+    ox = (fw - SCENE_W * k) / 2; oy = (fh - SCENE_H * k) / 2;
+    fx.setAttribute('width', fw); fx.setAttribute('height', fh);
+    homePos = { x: fw / 2, y: fh - 86 - 44 };
+    if (scene === 'room') concertInWalkman();
+  }
+
+  function concertInWalkman() {
+    const win = { x: ox + WALKMAN.win.x * k, y: oy + WALKMAN.win.y * k, w: WALKMAN.win.w * k, h: WALKMAN.win.h * k };
+    let cw = fw, ch = cw * (win.h / win.w);
+    if (ch > fh) { ch = fh; cw = ch * (win.w / win.h); }
+    const cropX = (fw - cw) / 2, cropY = clamp(oy + 470 * k - ch / 2, 0, fh - ch);
+    const s = win.w / cw;
+    concert.style.transform = `translate(${win.x - cropX * s}px, ${win.y - cropY * s}px) scale(${s})`;
+    concert.style.clipPath = `inset(${cropY}px ${fw - cropX - cw}px ${fh - cropY - ch}px ${cropX}px round ${12 / s}px)`;
+  }
+  function concertFull() { concert.style.transform = 'none'; concert.style.clipPath = 'inset(0 round 0px)'; }
+
+  // ---- Targets ------------------------------------------------------------------
+  function assignTarget(key, cut) {
+    current = key;
+    const cfg = key === 'walkman' ? WALKMAN : INSTRUMENTS[key];
+    homeTarget = toFrame(cfg.hot); targetPos = { ...homeTarget };
+    setTitle(cfg.title, cut);
+    if (scene === 'concert') {
+      stage.querySelectorAll('.member').forEach(m => m.classList.toggle('target', m.dataset.key === key));
+      stage.querySelectorAll('.cone').forEach(c => c.classList.toggle('target', c.dataset.cone === cfg.cone));
+    }
+    computeMaxPull();
+    drawRing();
+  }
+  function nextInstrument() {
+    const keys = Object.keys(INSTRUMENTS).filter(x => x !== current);
+    return keys[Math.floor(Math.random() * keys.length)];
+  }
+  function computeMaxPull() {
+    const ax = targetPos.x - homePos.x, ay = targetPos.y - homePos.y;
+    const L = Math.hypot(ax, ay) || 1, ux = ax / L, uy = ay / L;
+    const toEdge = Math.min(ux > 0 ? (fw - targetPos.x) / ux : ux < 0 ? -targetPos.x / ux : Infinity,
+                            uy > 0 ? (fh - targetPos.y) / uy : uy < 0 ? -targetPos.y / uy : Infinity);
+    maxPull = Math.max(24, Math.min(Math.max(D.pullMin, D.pullFraction * L), toEdge - 40 + D.tolerance));
+  }
+  const magnetOn = () => !!D.magnet && scene === 'concert' && !held;
+  const holdMs = () => scene === 'concert' ? HOLD_MS_CONCERT : HOLD_MS_ROOM;
+
+  // ---- Round control ------------------------------------------------------------
+  function resetRound() {
+    holding = false; held = false; onTarget = false; progress = 0;
+    tension = 0; vel = { x: 0, y: 0 }; struggleMs = 0; hintedCloser = false; focusMs = 0; nextThoughtAt = 0;
+    leaveField(); clearThoughts(); stopPlaying(); spawned = 0; audio.hold(null); audio.flood(false);
+    puckPos = { ...homePos }; pointerPos = { ...homePos };
+    place(lens, puckPos);
+    lens.classList.remove('grabbed', 'held', 'hard', 'hidden');
+    stage.classList.remove('held'); room.classList.remove('held');
+    arena.classList.remove('held-state', 'walkman-held');
+    fx.classList.remove('taut', 'hardfield', 'heldrope');
+    panel.classList.remove('show');
+    timer.classList.remove('on');
+    setHint(scene === 'concert' ? 'Pull the lens up. Keep it there.' : 'The Walkman. Hold it.');
+    drawRope(); drawRing();
+  }
+
+  function lockIn() {
+    held = true; holding = false; clearThoughts();
+    lens.classList.remove('grabbed', 'hard'); lens.classList.add('held');
+    ring.classList.add('flash'); setTimeout(() => ring.classList.remove('flash'), 120);
+    fx.classList.remove('taut', 'hardfield'); fx.classList.add('heldrope');
+    (scene === 'concert' ? stage : room).classList.add('held');
+    arena.classList.add('held-state');
+    if (scene === 'room') { arena.classList.add('walkman-held'); madeIt = true; audio.walkmanHeld(true); } else audio.hold(current);
+    const cfg = current === 'walkman' ? WALKMAN : INSTRUMENTS[current];
+    panelBody.textContent = cfg.body;
+    panelAside.hidden = scene !== 'concert';
+    panelActions.hidden = scene !== 'room';
+    panelSuggest.hidden = !(scene === 'concert' && level === 'easy');
+    buzz(50);
+    drawRing(); wake();
+    if (scene === 'concert' && level === 'easy') unlockHard();
+    if (scene === 'concert') {
+      // The held instrument starts playing: the player bobs on the beat and sound rings leave the instrument.
+      const m = stage.querySelector(`.member[data-key="${current}"]`);
+      if (m) m.classList.add('playing');
+      waves.setAttribute('transform', `translate(${homeTarget.x} ${homeTarget.y})`);
+      waves.classList.add('on');
+      setTimeout(() => showInter('Now you\u2019re in the zone. Everything else has dropped to a hum, and the one thing you chose is all there is.', () => panel.classList.add('show')), 700);
+    } else {
+      setTimeout(() => panel.classList.add('show'), 400);
+    }
+  }
+  function stopPlaying() {
+    stage.querySelectorAll('.member.playing').forEach(m => m.classList.remove('playing'));
+    waves.classList.remove('on');
+  }
+  function releaseHold() {
+    // Grabbing the lens again after a hold: it all comes back.
+    held = false; stopPlaying(); audio.hold(null); audio.walkmanHeld(false);
+    lens.classList.remove('held');
+    stage.classList.remove('held'); room.classList.remove('held');
+    arena.classList.remove('held-state', 'walkman-held');
+    fx.classList.remove('heldrope');
+    panel.classList.remove('show');
+    progress = 0;
+    if (scene === 'concert') assignTarget(nextInstrument());
+    else { assignTarget('walkman'); }
+    setHint(scene === 'concert' ? 'Pull the lens up. Keep it there.' : 'The Walkman. Hold it.');
+  }
+
+  // ---- Interstitials ----------------------------------------------------------------
+  let interNext = null;
+  function showInter(text, next) {
+    interText.textContent = text; interNext = next;
+    arena.classList.add('inter-open');
+    inter.classList.add('show');
+    requestAnimationFrame(() => requestAnimationFrame(() => inter.classList.add('in')));
+  }
+  function dismissInter() {
+    if (!inter.classList.contains('in')) return;
+    audio.start();
+    inter.classList.remove('in');
+    arena.classList.remove('inter-open');
+    const next = interNext; interNext = null;
+    setTimeout(() => { inter.classList.remove('show'); if (next) next(); }, 420);
+  }
+  inter.addEventListener('pointerup', dismissInter);
+
+  // The opening: you're in the room, the show is on the Walkman, then the headphones go on.
+  function startIntro() {
+    scene = 'room';
+    arena.classList.add('in-room', 'intro');
+    [concert, room, $('roomVeil')].forEach(el => el.classList.add('still'));
+    layout(); concertInWalkman();
+    void concert.offsetWidth;
+    [concert, room, $('roomVeil')].forEach(el => el.classList.remove('still'));
+    resetRound(); assignTarget('walkman');
+    setTimeout(() => showInter('Imagine you\u2019re sitting down to relax and listen to your headphones.', () => {
+      zoomIn(() => showInter('Now you\u2019re in the music. Try to focus on just one instrument.', () => {
+        arena.classList.remove('intro');
+        resetRound(); assignTarget('drums'); wake();
+      }));
+    }), 900);
+  }
+  function zoomIn(done) {
+    busy = true; arena.classList.add('busy');
+    lens.classList.add('hidden'); ring.style.opacity = 0; ropeCore.style.opacity = 0; ropeDash.style.opacity = 0;
+    arena.classList.add('zooming-in'); arena.classList.remove('in-room', 'walkman-held');
+    concertFull();
+    buzz(40);
+    setTimeout(() => {
+      scene = 'concert'; busy = false; arena.classList.remove('busy', 'zooming-in');
+      ring.style.opacity = 1; ropeCore.style.opacity = 1; ropeDash.style.opacity = 1;
+      audio.setScene('concert');
+      done();
+    }, 1200);
+  }
+
+  // ---- Scene transitions ---------------------------------------------------------
+  function giveUp() {
+    busy = true; arena.classList.add('busy');
+    holding = false; leaveField();
+    lens.classList.remove('grabbed', 'hard');
+    timer.classList.remove('on');
+    buzz(40); audio.setScene('room');
+    // The lens and rope ride inside the shrinking concert.
+    const sx = (puckPos.x - ox) / k, sy = (puckPos.y - oy) / k, hx = (homePos.x - ox) / k, hy = (homePos.y - oy) / k;
+    concertLensDot.setAttribute('cx', sx); concertLensDot.setAttribute('cy', sy);
+    concertRope.setAttribute('d', `M${hx},${hy + 60} L${sx},${sy + 44}`);
+    concertLens.style.opacity = 1;
+    lens.classList.add('hidden'); ring.style.opacity = 0; ropeCore.style.opacity = 0; ropeDash.style.opacity = 0;
+    arena.classList.add('zooming-out');
+    requestAnimationFrame(() => { arena.classList.add('in-room'); concertInWalkman(); });
+    setTimeout(() => {
+      scene = 'room'; busy = false; grabBacks = 0; misses = 0;
+      arena.classList.remove('busy', 'zooming-out');
+      concertLens.style.opacity = 0; ring.style.opacity = 1; ropeCore.style.opacity = 1; ropeDash.style.opacity = 1;
+      resetRound();
+      assignTarget('walkman', true);
+      wake();
+    }, 1600);
+  }
+  function headphonesOn() {
+    panel.classList.remove('show');
+    zoomIn(() => { setLevel('easy'); resetRound(); assignTarget('drums'); showEnding(true); });
+  }
+  function showEnding(made) {
+    arena.classList.add('ending'); audio.ending();
+    endLine1.textContent = made ? `It took ${tries} ${tries === 1 ? 'try' : 'tries'} to hear it.` : 'You didn’t get to hear it.';
+    ending.classList.add('show');
+    const lines = [...ending.querySelectorAll('.line')];
+    lines.forEach(l => l.classList.remove('in')); again.classList.remove('in');
+    lines.forEach((l, i) => setTimeout(() => l.classList.add('in'), 1200 + i * 600));
+    setTimeout(() => again.classList.add('in'), 1200 + lines.length * 600);
+  }
+  function restart() {
+    ending.classList.remove('show'); arena.classList.remove('ending');
+    tries = 0; madeIt = false; grabBacks = 0; misses = 0;
+    if (scene === 'room') {
+      arena.classList.remove('in-room', 'walkman-held'); concertFull();
+      scene = 'concert';
+    }
+    ring.style.opacity = 1; ropeCore.style.opacity = 1; ropeDash.style.opacity = 1;
+    audio.restart();
+    resetRound(); assignTarget('drums'); wake();
+  }
+
+  // ---- Thoughts --------------------------------------------------------------------
+  // Before the first catch: one still thought at a time. After it: the flood.
+  const phase = () => PHASES[grabBacks < 1 ? 0 : spawned < PHASES[1].until ? 1 : 2];
+  const flooding = () => !!phase().flood;
+  const ringHolder = () => thoughts.find(t => t.hasRing);
+  function scheduleThought() {
+    // Phase 1 uses the level's gap and buys a little quiet per grab-back. Later phases use their own gap and never let up.
+    const ph = phase();
+    const [lo, hi] = ph.gap || D.thoughtGap;
+    nextThoughtAt = focusMs + rand(lo, hi) + (ph.gap ? 0 : grabBacks * D.thoughtGrow);
+  }
+  function canSpawn() {
+    if (scene !== 'room' || held || busy) return false;
+    const ph = phase();
+    if (ph.flood) return thoughts.length < ph.cap;
+    if (!holding) return false;
+    return thoughts.length === 0 ? onTarget : (!ph.static && thoughts.length < ph.cap);
+  }
+  function discOf(t) { const cardW = Math.min(280, fw - 32); return { x: t.pos.x - cardW / 2 + 14 + 24, y: t.pos.y }; }
+  function spawnThought() {
+    if (!thoughtBag.length) thoughtBag = shuffle([...THOUGHTS]);
+    const text = thoughtBag.pop();
+    const ph = phase();
+    spawned++;
+    const moving = !ph.static;
+    let pos, vx = 0, vy = 0;
+    if (moving) {
+      const [lo, hi] = ph.speed;
+      const edge = ph.flood ? Math.floor(rand(0, 3)) : Math.floor(rand(0, 2));   // 0 left, 1 right, 2 top (flood only)
+      if (edge === 2) { pos = { x: rand(fw * 0.25, fw * 0.75), y: -110 }; vx = rand(-25, 25); vy = rand(lo, hi) * 0.8; }
+      else { const side = edge === 0 ? -1 : 1; pos = { x: side < 0 ? -170 : fw + 170, y: rand(oy + 240 * k, oy + 520 * k) }; vx = -side * rand(lo, hi); vy = rand(-14, 14); }
+      if (ph.flood && !arena.classList.contains('flood')) { arena.classList.add('flood'); setHint('They keep coming.'); buzz([20, 30, 20, 30, 40]); audio.flood(true); }
+    } else {
+      let n = 0;
+      do { pos = { x: rand(fw * 0.18 + 140, Math.max(fw * 0.18 + 140, fw * 0.82 - 140)), y: rand(oy + 300 * k, oy + 470 * k) }; n++; }
+      while (n < 20 && (Math.hypot(pos.x - homeTarget.x, pos.y - homeTarget.y) < 150 || Math.hypot(pos.x - puckPos.x, pos.y - puckPos.y) < 120));
+    }
+    const el = document.createElement('div');
+    el.className = 'thought' + (moving ? '' : ' static');
+    el.innerHTML = `<div class="disc"><svg viewBox="0 0 48 48" width="48" height="48"><circle cx="24" cy="24" r="21"/></svg></div><div class="text">${text}</div>`;
+    place(el, pos);
+    frame.appendChild(el);
+    const t = { el, pos, vx, vy, moving, circle: el.querySelector('circle'), discMs: 0, hasRing: false };
+    thoughts.push(t);
+    // The ring is taken by a new thought only when no other holds it. In the flood, only if you're actually holding on.
+    if (!ringHolder() && (!ph.flood || (holding && onTarget && performance.now() - ringHomeAt > FLOOD_GRACE_MS))) giveRing(t);
+    if (!ph.flood) setHint(thoughts.length > 1 ? 'Catch them.' : 'Go get it back.');
+    audio.thought();
+    buzz([15, 40, 15]);
+  }
+  function giveRing(t) {
+    thoughts.forEach(o => { o.hasRing = false; o.el.classList.remove('ring'); });
+    t.hasRing = true; t.el.classList.add('ring');
+    stolen = true; onTarget = false;
+    if (!flooding() || level === 'hard') progress = 0;   // on Easy the flood lets what you've held survive; on Hard nothing does
+    const disc = discOf(t);
+    animateRing(targetPos, disc, 420, () => { ring.style.opacity = 0; computeMaxPull(); });
+    targetPos = { ...disc }; computeMaxPull();
+  }
+  function removeThought(t, popped) {
+    thoughts = thoughts.filter(o => o !== t);
+    if (popped) { t.el.classList.add('pop'); setTimeout(() => t.el.remove(), 180); } else t.el.remove();
+    if (t.hasRing) {
+      // Outside the flood the ring hops to the next thought still up. In the flood it comes home, or you'd never get it back.
+      const next = flooding() ? null : thoughts[thoughts.length - 1];
+      if (next) giveRing(next); else returnRing();
+    }
+  }
+  function popThought(t) {
+    grabBacks++;
+    removeThought(t, true);
+    buzz(25);
+    if (level === 'hard' && grabBacks + misses >= HARD_ENDS_AFTER) endHard();
+  }
+  function endHard() { holding = false; lens.classList.remove('grabbed'); clearThoughts(); showEnding(false); }
+  function returnRing() {
+    stolen = false; ringHomeAt = performance.now();
+    ring.style.opacity = 1;
+    animateRing(targetPos, homeTarget, 320, () => {});
+    targetPos = { ...homeTarget }; computeMaxPull();
+    onTarget = false; focusMs = 0; scheduleThought();
+    setHint(flooding() ? 'They keep coming.' : 'The Walkman. Hold it.');
+  }
+  function clearThoughts() {
+    thoughts.forEach(t => t.el.remove()); thoughts = []; stolen = false;
+    arena.classList.remove('flood');
+  }
+  function moveThoughts(dt) {
+    for (const t of [...thoughts]) {
+      if (!t.moving) continue;
+      t.pos = { x: t.pos.x + t.vx * dt / 1000, y: t.pos.y + t.vy * dt / 1000 };
+      place(t.el, t.pos);
+      if (t.hasRing && !ringAnim) { targetPos = discOf(t); }
+      if (t.pos.x < -200 || t.pos.x > fw + 200 || t.pos.y > fh + 160) {   // slid off the screen, uncaught
+        if (t.hasRing) { misses++; if (level === 'hard' && grabBacks + misses >= HARD_ENDS_AFTER) { removeThought(t, false); endHard(); return; } }
+        removeThought(t, false);
+      }
+    }
+  }
+  function animateRing(from, to, ms, done) {
+    const t0 = performance.now();
+    ringAnim = { from: { ...from }, to: { ...to }, t0, ms, done };
+    wake();
+  }
+
+  // ---- Physics ----------------------------------------------------------------------
+  function computeTension() {
+    if (!holding) return 0;
+    const ax = targetPos.x - homePos.x, ay = targetPos.y - homePos.y, L = Math.hypot(ax, ay) || 1;
+    const p = ((pointerPos.x - homePos.x) * ax + (pointerPos.y - homePos.y) * ay) / (L * L);
+    return Math.pow(clamp(p, 0, 1), D.tensionCurve);
+  }
+  function springAnchor() {
+    if (held) return homeTarget;
+    if (!holding) return homePos;
+    const dx = homePos.x - pointerPos.x, dy = homePos.y - pointerPos.y, d = Math.hypot(dx, dy) || 1;
+    const pull = tension * maxPull;
+    return { x: pointerPos.x + dx / d * pull, y: pointerPos.y + dy / d * pull };
+  }
+  function applyMagnet() {
+    const dx = puckPos.x - targetPos.x, dy = puckPos.y - targetPos.y, d = Math.hypot(dx, dy) || 0.001, R = D.magnetRadius;
+    if (d >= R) { if (inField) leaveField(); return; }
+    if (!inField) {
+      inField = true;
+      const ax = targetPos.x - homePos.x, ay = targetPos.y - homePos.y;
+      slipSide = Math.sign(dx * ay - dy * ax) || (Math.random() < 0.5 ? -1 : 1);
+      lens.classList.add('hard'); fx.classList.add('hardfield'); field.classList.add('on');
+    }
+    const near = 1 - d / R, f = D.magnetForce * near * near;
+    const nx = dx / d, ny = dy / d, tx = -ny * slipSide, ty = nx * slipSide;
+    vel.x += nx * f + tx * f * 0.7; vel.y += ny * f + ty * f * 0.7;
+    const keep = D.tolerance + D.keepOut;
+    if (d < keep) { puckPos = { x: targetPos.x + nx * keep, y: targetPos.y + ny * keep }; const vin = vel.x * nx + vel.y * ny; if (vin < 0) { vel.x -= vin * nx; vel.y -= vin * ny; } }
+    const now = performance.now();
+    if (now - hapticAt > 260) { buzz(Math.round(10 + 20 * near)); hapticAt = now; }
+    audio.wobble(current, near);
+  }
+  function leaveField() {
+    inField = false; slipSide = 0; if (current !== 'walkman') audio.wobble(current, 0);
+    lens.classList.remove('hard'); fx.classList.remove('hardfield'); field.classList.remove('on');
+    streaks.innerHTML = '';
+  }
+
+  // ---- Drawing ------------------------------------------------------------------------
+  function drawRope() {
+    const x1 = homePos.x, y1 = fh + 6, x2 = puckPos.x, y2 = puckPos.y + 44;
+    const len = Math.hypot(x2 - x1, y2 - y1), sag = (1 - tension) * Math.min(len * 0.12, 40);
+    const d = `M${x1},${y1} Q${(x1 + x2) / 2 + sag * 0.4},${(y1 + y2) / 2 + sag} ${x2},${y2}`;
+    ropeCore.setAttribute('d', d); ropeDash.setAttribute('d', d);
+    fx.classList.toggle('taut', tension > 0.35 || inField);
+  }
+  function drawRing() {
+    ring.setAttribute('transform', `translate(${targetPos.x} ${targetPos.y})`);
+    field.setAttribute('transform', `translate(${homeTarget.x} ${homeTarget.y})`);
+    const near = Math.hypot(puckPos.x - targetPos.x, puckPos.y - targetPos.y) < 120;
+    ringRest.style.opacity  = scene === 'room' && !held && !stolen ? 1 : 0;
+    ringTrace.style.opacity = scene === 'concert' && !held && (near || progress > 0) ? 1 : 0;
+    ringHalo.style.opacity  = held ? 1 : 0;
+    ringFill.style.strokeDashoffset = RING_C * (1 - progress);
+    ringFill.style.opacity = held || progress > 0 ? 1 : 0;
+    ringFill.setAttribute('r', held ? (scene === 'room' ? 76 : 60) : 60);
+    ringHalo.setAttribute('r', held ? (scene === 'room' ? 88 : 72) : 72);
+  }
+  function drawStreaks() {
+    if (!inField || Math.hypot(vel.x, vel.y) < 1.5) { if (streaks.childElementCount) streaks.innerHTML = ''; return; }
+    const sp = Math.hypot(vel.x, vel.y), bx = -vel.x / sp, by = -vel.y / sp, px = -by, py = bx;
+    let s = '';
+    [[-14, 3], [0, 2], [16, 3]].forEach(([off, w]) => {
+      const x0 = puckPos.x + bx * 50 + px * off, y0 = puckPos.y + by * 50 + py * off;
+      s += `<line x1="${x0}" y1="${y0}" x2="${x0 + bx * (10 + sp * 2)}" y2="${y0 + by * (10 + sp * 2)}" stroke-width="${w}" opacity=".6"/>`;
+    });
+    streaks.innerHTML = s;
+  }
+
+  // ---- Frame loop ------------------------------------------------------------------------
+  function step(t) {
+    const dt = lastT ? Math.min(50, t - lastT) : 16; lastT = t;
+    tension = computeTension();
+    const anchor = springAnchor();
+    if (reduceMotion) { puckPos = { ...anchor }; vel = { x: 0, y: 0 }; }
+    else {
+      const kk = STIFFNESS * (1 - D.heavyAtMax * tension);
+      vel.x = (vel.x + (anchor.x - puckPos.x) * kk) * DAMPING; vel.y = (vel.y + (anchor.y - puckPos.y) * kk) * DAMPING;
+      puckPos = { x: puckPos.x + vel.x, y: puckPos.y + vel.y };
+    }
+    if (magnetOn() && !busy) applyMagnet(); else if (inField) leaveField();
+    place(lens, puckPos);
+
+    // Hit test + progress.
+    if (!held && !busy && !ringAnim) {
+      const d = Math.hypot(puckPos.x - targetPos.x, puckPos.y - targetPos.y);
+      const holder = stolen ? ringHolder() : null;
+      const was = onTarget; onTarget = d <= (stolen ? (holder && holder.moving ? 46 : 30) : D.tolerance);
+      if (onTarget && !was) buzz(10);
+      if (holding && onTarget) {
+        if (stolen) {
+          const t = ringHolder();
+          if (t) { const need = t.moving ? DISC_MS * 0.6 : DISC_MS; t.discMs += dt; t.circle.style.strokeDashoffset = 132 * (1 - Math.min(1, t.discMs / need)); if (t.discMs >= need) popThought(t); }
+        } else { progress = Math.min(1, progress + dt / holdMs()); if (progress >= 1) lockIn(); }
+      }
+      if (canSpawn()) {
+        focusMs += dt; if (!nextThoughtAt) scheduleThought(); if (focusMs >= nextThoughtAt) { spawnThought(); focusMs = 0; scheduleThought(); }
+      }
+    }
+
+    // Hard-mode struggle clock.
+    if (holding && inField && !busy) {
+      struggleMs += dt;
+      if (!hintedCloser && struggleMs > 4000) { hintedCloser = true; setHint('Closer is worse.'); }
+      if (struggleMs > 7000) { timer.textContent = '0:0' + Math.min(9, Math.floor(struggleMs / 1000)); timer.classList.add('on'); }
+      if (struggleMs >= STRUGGLE_MS) giveUp();
+    }
+
+    moveThoughts(dt);
+
+    // Ring travel animation.
+    if (ringAnim) {
+      const u = Math.min(1, (t - ringAnim.t0) / ringAnim.ms), e = 1 - Math.pow(1 - u, 3);
+      targetPos = { x: ringAnim.from.x + (ringAnim.to.x - ringAnim.from.x) * e, y: ringAnim.from.y + (ringAnim.to.y - ringAnim.from.y) * e };
+      if (u >= 1) { const done = ringAnim.done; ringAnim = null; done(); }
+    }
+
+    drawRope(); drawRing(); drawStreaks();
+    const speed = Math.hypot(vel.x, vel.y);
+    const settled = speed < 0.05 && Math.hypot(anchor.x - puckPos.x, anchor.y - puckPos.y) < 0.5 && !inField && !ringAnim && !thoughts.some(t => t.moving);
+    if (holding || !settled) raf = requestAnimationFrame(step); else { raf = null; lastT = 0; }
+  }
+  function wake() { if (!raf) raf = requestAnimationFrame(step); }
+
+  // ---- Input ----------------------------------------------------------------------------------
+  const framePoint = e => { const r = frame.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  lens.addEventListener('pointerdown', e => {
+    if (busy || ending.classList.contains('show')) return;
+    e.preventDefault(); audio.start();
+    if (held) releaseHold();
+    lens.setPointerCapture(e.pointerId);
+    const p = framePoint(e);
+    holding = true; tries++;
+    grabOffset = { x: p.x - puckPos.x, y: p.y - puckPos.y };
+    pointerPos = { ...puckPos };
+    lens.classList.add('grabbed');
+    wake();
+  });
+  lens.addEventListener('pointermove', e => { if (!holding) return; const p = framePoint(e); pointerPos = { x: p.x - grabOffset.x, y: p.y - grabOffset.y }; });
+  function release(e) {
+    if (!holding) return;
+    holding = false;
+    lens.classList.remove('grabbed');
+    try { lens.releasePointerCapture(e.pointerId); } catch {}
+    wake();
+  }
+  lens.addEventListener('pointerup', release); lens.addEventListener('pointercancel', release);
+  $('headphones').addEventListener('click', headphonesOn);
+  $('tryHard').addEventListener('click', () => { setLevel('hard'); buzz(15); releaseHold(); wake(); });
+  again.addEventListener('click', restart);
+  $('mute').addEventListener('click', e => { audio.start(); const m = audio.toggleMute(); e.currentTarget.setAttribute('aria-pressed', String(m)); e.currentTarget.setAttribute('aria-label', m ? 'Sound off' : 'Sound on'); });
+
+  const toggleButtons = [...document.querySelectorAll('#toggle button')];
+  const hardButton = toggleButtons.find(b => b.dataset.level === 'hard');
+  function syncHardLock() { hardButton.setAttribute('aria-disabled', String(!easyDone)); hardButton.title = easyDone ? '' : 'Hold one instrument on Easy first'; }
+  function unlockHard() { if (easyDone) return; easyDone = true; try { localStorage.setItem('frf-easy-done', '1'); } catch {} syncHardLock(); }
+  function setLevel(next) {
+    if (next === 'hard' && !easyDone) return;
+    level = next; D = LEVELS[level];
+    toggleButtons.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.level === level)));
+    try { localStorage.setItem('frf-level', level); } catch {}
+    if (!magnetOn()) leaveField();
+    struggleMs = 0; hintedCloser = false; timer.classList.remove('on');
+    computeMaxPull(); wake();
+  }
+  toggleButtons.forEach(b => b.addEventListener('click', () => { setLevel(b.dataset.level); buzz(15); }));
+  toggleButtons.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.level === level)));
+  syncHardLock();
+
+  let resizeT;
+  addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (holding || busy) return; layout(); resetRound(); assignTarget(current); wake(); }, 120); });
+
+  startIntro();
+</script>
+</body>
+</html>

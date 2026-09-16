@@ -1,0 +1,15 @@
+{
+  "name": "adhd-focus-app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "serve . -l 3000",
+    "artifact": "scripts/artifact.sh",
+    "test": "node tests/flow.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.50.0",
+    "serve": "^14.2.4"
+  }
+}
