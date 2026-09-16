@@ -4,6 +4,10 @@ A phone-first interactive piece. You sit down with your headphones, the show fil
 
 One HTML file, SVG and CSS only, Google Fonts allowed. `index.html` is the whole app.
 
+## Demo
+
+https://butch-ab.github.io/adhd-focus-app/
+
 ## Run
 
 Any static server works. Stems (see `audio/README.md`) only load over http.
