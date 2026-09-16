@@ -87,7 +87,7 @@
   #arena.busy #lens, #arena.ending #lens { pointer-events: none; }
 
   /* ---- Toggle + title -------------------------------------------------------- */
-  #toggle { position: absolute; top: 22px; left: 0; right: 0; display: flex; justify-content: center; z-index: 7; transition: opacity .4s var(--ui); }
+  #toggle { position: absolute; top: 22px; left: 16px; z-index: 7; transition: opacity .4s var(--ui); }
   #toggle .pill { display: flex; background: rgba(var(--ink-rgb),.08); border: 1px solid rgba(var(--ink-rgb),.14); border-radius: 999px; padding: 3px; }
   #toggle button { padding: 9px 18px; border: 0; border-radius: 999px; background: transparent; color: rgba(var(--ink-rgb),.6);
     font: 500 12px/1 var(--body); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; transition: background .22s var(--ui), color .22s var(--ui), box-shadow .12s; }
@@ -108,7 +108,7 @@
   #hint.swap { opacity: 0; }
   #timer { position: absolute; left: 0; right: 0; bottom: 36px; text-align: center; font: 400 13px/1.4 var(--body); color: rgba(var(--hard-rgb),.8); z-index: 7; opacity: 0; transition: opacity .2s; pointer-events: none; }
   #timer.on { opacity: 1; }
-  #mute { position: absolute; top: 22px; right: 16px; height: 44px; z-index: 9; padding: 0 14px 0 10px; border-radius: 999px; border: 1px solid rgba(var(--ink-rgb),.14);
+  #mute { position: absolute; top: 22px; right: 16px; height: 44px; z-index: 9; padding: 0 12px 0 10px; border-radius: 999px; border: 1px solid rgba(var(--ink-rgb),.14);
     background: rgba(var(--ink-rgb),.08); color: rgba(var(--ink-rgb),.8); display: flex; align-items: center; gap: 8px; cursor: pointer;
     font: 500 12px/1 var(--body); letter-spacing: .06em; text-transform: uppercase; transition: opacity .4s var(--ui), background .22s var(--ui), color .22s var(--ui); }
   #mute .x { display: none; } #mute[aria-pressed="true"] .wave { display: none; } #mute[aria-pressed="true"] .x { display: block; }
@@ -118,7 +118,7 @@
   #arena.in-room:not(.intro) #mute { opacity: .4; } #arena.zooming-out #mute { opacity: 0; }
   #arena.intro #mute { opacity: 1; }
   #arena.inter-open #mute { opacity: 1; }
-  @media (max-width: 360px) { #mute .label { display: none; } #mute { padding: 0; width: 44px; justify-content: center; } }
+  @media (max-width: 420px) { #mute .label { display: none; } #mute { padding: 0; width: 44px; justify-content: center; } }
 
   /* ---- Thought bubbles ---------------------------------------------------------- */
   .thought { position: absolute; z-index: 5; width: 280px; max-width: calc(100% - 32px); display: flex; align-items: center; gap: 14px; padding: 16px 22px 16px 14px;
@@ -556,12 +556,15 @@
             thoughtGap: [800, 1300], thoughtGrow: 0 },
   };
   const SCENE_W = 400, SCENE_H = 860;
-  // One still thought to learn on. Catch it, and the flood starts: from every side, whether you're holding or not.
-  const PHASES = [
-    { until: 1,        cap: 1, gap: null,       speed: null,      static: true },   // the first one sits and drifts
-    { until: 1,        cap: 3, gap: [500, 900],  speed: [55, 90] },                  // (unused: kept so the sliding phase can be re-enabled by raising `until`)
-    { until: Infinity, cap: 7, gap: [220, 480],  speed: [80, 150], flood: true },
+  // Three rounds of thoughts. Every bubble is a target; clear them all to get the ring back on the Walkman.
+  // Hold the Walkman to bring on the next round. Clear the last round and the music is yours.
+  const ROUNDS = [
+    { count: 3,  gap: [500, 900],  speed: [0, 0],    cap: 3,  static: true },                   // sit and drift
+    { count: 8,  gap: [400, 750],  speed: [45, 85],  cap: 8 },                                  // slide in from the sides
+    { count: 20, gap: [180, 380],  speed: [70, 140], cap: 20, flood: true, timeLimit: 25000 },  // from every edge, on a clock
   ];
+  const ROUND_LEAD_MS = 1200;     // steady hold on the Walkman before a round begins
+  const DISC_MS_MOVING = 0.6;     // moving bubbles pop in this fraction of DISC_MS
 
   const INSTRUMENTS = {
     guitar: { title: 'The guitar', hot: [77, 458],  cone: 'left',   body: 'Everything else drops back. The pick on the strings before the note. The rest of the room turns into a hum.' },
@@ -599,8 +602,8 @@
   let puckPos = { x: 0, y: 0 }, pointerPos = { x: 0, y: 0 }, vel = { x: 0, y: 0 }, grabOffset = { x: 0, y: 0 };
   let tension = 0, maxPull = 80, progress = 0, raf = null, lastT = 0;
   let inField = false, slipSide = 0, struggleMs = 0, hapticAt = 0, hintedCloser = false;
-  let stolen = false, thoughts = [], spawned = 0, focusMs = 0, nextThoughtAt = 0, thoughtBag = [], grabBacks = 0, misses = 0, ringHomeAt = 0;
-  const HARD_ENDS_AFTER = 5;       // Hard: this many thoughts caught or lost, and the night is over
+  let stolen = false, thoughts = [], spawned = 0, focusMs = 0, nextThoughtAt = 0, thoughtBag = [], grabBacks = 0, misses = 0;
+  let round = 0, roundActive = false, roundStartAt = 0, cleared = 0;   // round: index of the next round to start; cleared: rounds beaten
   const FLOOD_GRACE_MS = 1300;     // in the flood, the ring can't be taken again this soon after coming home
   let ringAnim = null, tries = 0, madeIt = false;
 
@@ -788,7 +791,7 @@
     arena.classList.add('zooming-out');
     requestAnimationFrame(() => { arena.classList.add('in-room'); concertInWalkman(); });
     setTimeout(() => {
-      scene = 'room'; busy = false; grabBacks = 0; misses = 0;
+      scene = 'room'; busy = false; grabBacks = 0; misses = 0; round = 0; cleared = 0;
       arena.classList.remove('busy', 'zooming-out');
       concertLens.style.opacity = 0; ring.style.opacity = 1; ropeCore.style.opacity = 1; ropeDash.style.opacity = 1;
       resetRound();
@@ -811,7 +814,7 @@
   }
   function restart() {
     ending.classList.remove('show'); arena.classList.remove('ending');
-    tries = 0; madeIt = false; grabBacks = 0; misses = 0;
+    tries = 0; madeIt = false; grabBacks = 0; misses = 0; round = 0; cleared = 0;
     if (scene === 'room') {
       arena.classList.remove('in-room', 'walkman-held'); concertFull();
       scene = 'concert';
@@ -821,114 +824,107 @@
     resetRound(); assignTarget('drums'); wake();
   }
 
-  // ---- Thoughts --------------------------------------------------------------------
-  // Before the first catch: one still thought at a time. After it: the flood.
-  const phase = () => PHASES[grabBacks < 1 ? 0 : spawned < PHASES[1].until ? 1 : 2];
-  const flooding = () => !!phase().flood;
-  const ringHolder = () => thoughts.find(t => t.hasRing);
-  function scheduleThought() {
-    // Phase 1 uses the level's gap and buys a little quiet per grab-back. Later phases use their own gap and never let up.
-    const ph = phase();
-    const [lo, hi] = ph.gap || D.thoughtGap;
-    nextThoughtAt = focusMs + rand(lo, hi) + (ph.gap ? 0 : grabBacks * D.thoughtGrow);
-  }
-  function canSpawn() {
-    if (scene !== 'room' || held || busy) return false;
-    const ph = phase();
-    if (ph.flood) return thoughts.length < ph.cap;
-    if (!holding) return false;
-    return thoughts.length === 0 ? onTarget : (!ph.static && thoughts.length < ph.cap);
-  }
+  // ---- Thoughts: three rounds --------------------------------------------------------
+  const curRound = () => ROUNDS[Math.min(round, ROUNDS.length - 1)];
+  const flooding = () => roundActive && !!curRound().flood;
+  const roundsDone = () => cleared >= ROUNDS.length;
   function discOf(t) { const cardW = Math.min(280, fw - 32); return { x: t.pos.x - cardW / 2 + 14 + 24, y: t.pos.y }; }
+
+  function startRound() {
+    const r = curRound();
+    roundActive = true; spawned = 0; roundStartAt = performance.now(); focusMs = 0; nextThoughtAt = 0;
+    stolen = true; onTarget = false;
+    // The ring leaves the Walkman for the whole round.
+    ring.style.opacity = 0;
+    setHint(round === 0 ? 'Thoughts. Get rid of them.' : round === 1 ? 'More of them. All of them.' : 'They keep coming.');
+    if (r.flood) { arena.classList.add('flood'); buzz([20, 30, 20, 30, 40]); audio.flood(true); }
+    else buzz([15, 40, 15]);
+    spawnThought();
+  }
+  function scheduleThought() { const [lo, hi] = curRound().gap; nextThoughtAt = focusMs + rand(lo, hi); }
+  function canSpawn() { const r = curRound(); return roundActive && spawned < r.count && thoughts.length < r.cap; }
+
   function spawnThought() {
     if (!thoughtBag.length) thoughtBag = shuffle([...THOUGHTS]);
     const text = thoughtBag.pop();
-    const ph = phase();
+    const r = curRound();
     spawned++;
-    const moving = !ph.static;
+    const moving = !r.static;
     let pos, vx = 0, vy = 0;
     if (moving) {
-      const [lo, hi] = ph.speed;
-      const edge = ph.flood ? Math.floor(rand(0, 3)) : Math.floor(rand(0, 2));   // 0 left, 1 right, 2 top (flood only)
+      const [lo, hi] = r.speed;
+      const edge = r.flood ? Math.floor(rand(0, 3)) : Math.floor(rand(0, 2));   // 0 left, 1 right, 2 top (flood only)
       if (edge === 2) { pos = { x: rand(fw * 0.25, fw * 0.75), y: -110 }; vx = rand(-25, 25); vy = rand(lo, hi) * 0.8; }
       else { const side = edge === 0 ? -1 : 1; pos = { x: side < 0 ? -170 : fw + 170, y: rand(oy + 240 * k, oy + 520 * k) }; vx = -side * rand(lo, hi); vy = rand(-14, 14); }
-      if (ph.flood && !arena.classList.contains('flood')) { arena.classList.add('flood'); setHint('They keep coming.'); buzz([20, 30, 20, 30, 40]); audio.flood(true); }
     } else {
       let n = 0;
-      do { pos = { x: rand(fw * 0.18 + 140, Math.max(fw * 0.18 + 140, fw * 0.82 - 140)), y: rand(oy + 300 * k, oy + 470 * k) }; n++; }
-      while (n < 20 && (Math.hypot(pos.x - homeTarget.x, pos.y - homeTarget.y) < 150 || Math.hypot(pos.x - puckPos.x, pos.y - puckPos.y) < 120));
+      do { pos = { x: rand(fw * 0.18 + 140, Math.max(fw * 0.18 + 140, fw * 0.82 - 140)), y: rand(oy + 250 * k, oy + 480 * k) }; n++; }
+      while (n < 30 && (Math.hypot(pos.x - homeTarget.x, pos.y - homeTarget.y) < 150 || Math.hypot(pos.x - puckPos.x, pos.y - puckPos.y) < 120 || thoughts.some(o => Math.abs(o.pos.y - pos.y) < 84 && Math.abs(o.pos.x - pos.x) < 200)));
     }
     const el = document.createElement('div');
-    el.className = 'thought' + (moving ? '' : ' static');
+    el.className = 'thought ring' + (moving ? '' : ' static');
     el.innerHTML = `<div class="disc"><svg viewBox="0 0 48 48" width="48" height="48"><circle cx="24" cy="24" r="21"/></svg></div><div class="text">${text}</div>`;
     place(el, pos);
     frame.appendChild(el);
-    const t = { el, pos, vx, vy, moving, circle: el.querySelector('circle'), discMs: 0, hasRing: false };
-    thoughts.push(t);
-    // The ring is taken by a new thought only when no other holds it. In the flood, only if you're actually holding on.
-    if (!ringHolder() && (!ph.flood || (holding && onTarget && performance.now() - ringHomeAt > FLOOD_GRACE_MS))) giveRing(t);
-    if (!ph.flood) setHint(thoughts.length > 1 ? 'Catch them.' : 'Go get it back.');
+    thoughts.push({ el, pos, vx, vy, moving, circle: el.querySelector('circle'), discMs: 0 });
     audio.thought();
-    buzz([15, 40, 15]);
   }
-  function giveRing(t) {
-    thoughts.forEach(o => { o.hasRing = false; o.el.classList.remove('ring'); });
-    t.hasRing = true; t.el.classList.add('ring');
-    stolen = true; onTarget = false;
-    if (!flooding() || level === 'hard') progress = 0;   // on Easy the flood lets what you've held survive; on Hard nothing does
-    const disc = discOf(t);
-    animateRing(targetPos, disc, 420, () => { ring.style.opacity = 0; computeMaxPull(); });
-    targetPos = { ...disc }; computeMaxPull();
+  // The bubble the lens is closest to. Every one of them is a target.
+  function nearestThought() {
+    let best = null, bd = Infinity;
+    for (const t of thoughts) { const d = discOf(t); const dd = Math.hypot(puckPos.x - d.x, puckPos.y - d.y); if (dd < bd) { bd = dd; best = t; } }
+    return best ? { t: best, d: bd } : null;
   }
   function removeThought(t, popped) {
     thoughts = thoughts.filter(o => o !== t);
     if (popped) { t.el.classList.add('pop'); setTimeout(() => t.el.remove(), 180); } else t.el.remove();
-    if (t.hasRing) {
-      // Outside the flood the ring hops to the next thought still up. In the flood it comes home, or you'd never get it back.
-      const next = flooding() ? null : thoughts[thoughts.length - 1];
-      if (next) giveRing(next); else returnRing();
+    t.discMs = 0;
+    checkRoundEnd();
+  }
+  function popThought(t) { grabBacks++; removeThought(t, true); buzz(25); }
+  function checkRoundEnd() {
+    if (!roundActive) return;
+    const r = curRound();
+    if (spawned >= r.count && thoughts.length === 0) {
+      // Round cleared.
+      roundActive = false; cleared = round + 1; round++;
+      arena.classList.remove('flood'); audio.flood(false);
+      returnRing();
+      if (roundsDone()) { setHint('Quiet. Hold it.'); }
+      else setHint(cleared === 1 ? 'Got them. Back to the Walkman.' : 'Cleared. Back to the Walkman.');
     }
   }
-  function popThought(t) {
-    grabBacks++;
-    removeThought(t, true);
-    buzz(25);
-    if (level === 'hard' && grabBacks + misses >= HARD_ENDS_AFTER) endHard();
+  function roundTimedOut() {
+    // The clock ran out on the last round. The night is over.
+    roundActive = false;
+    holding = false; lens.classList.remove('grabbed');
+    clearThoughts();
+    showEnding(false);
   }
-  function endHard() { holding = false; lens.classList.remove('grabbed'); clearThoughts(); showEnding(false); }
   function returnRing() {
-    stolen = false; ringHomeAt = performance.now();
+    stolen = false;
     ring.style.opacity = 1;
-    animateRing(targetPos, homeTarget, 320, () => {});
-    targetPos = { ...homeTarget }; computeMaxPull();
-    onTarget = false; focusMs = 0; scheduleThought();
-    setHint(flooding() ? 'They keep coming.' : 'The Walkman. Hold it.');
+    onTarget = false; focusMs = 0; nextThoughtAt = 0;
   }
   function clearThoughts() {
-    thoughts.forEach(t => t.el.remove()); thoughts = []; stolen = false;
+    thoughts.forEach(t => t.el.remove()); thoughts = []; stolen = false; roundActive = false;
     arena.classList.remove('flood');
   }
   function moveThoughts(dt) {
     for (const t of [...thoughts]) {
       if (!t.moving) continue;
       t.pos = { x: t.pos.x + t.vx * dt / 1000, y: t.pos.y + t.vy * dt / 1000 };
+      // Bounce off the edges rather than escape: every one has to be dealt with.
+      const m = 150;
+      if (t.pos.x < m && t.vx < 0 || t.pos.x > fw - m && t.vx > 0) { if (t.pos.x > -160 && t.pos.x < fw + 160) t.vx = -t.vx; }
+      if (t.pos.y < oy + 200 * k && t.vy < 0 || t.pos.y > oy + 540 * k && t.vy > 0) t.vy = -t.vy;
       place(t.el, t.pos);
-      if (t.hasRing && !ringAnim) { targetPos = discOf(t); }
-      if (t.pos.x < -200 || t.pos.x > fw + 200 || t.pos.y > fh + 160) {   // slid off the screen, uncaught
-        if (t.hasRing) { misses++; if (level === 'hard' && grabBacks + misses >= HARD_ENDS_AFTER) { removeThought(t, false); endHard(); return; } }
-        removeThought(t, false);
-      }
     }
-  }
-  function animateRing(from, to, ms, done) {
-    const t0 = performance.now();
-    ringAnim = { from: { ...from }, to: { ...to }, t0, ms, done };
-    wake();
   }
 
   // ---- Physics ----------------------------------------------------------------------
   function computeTension() {
-    if (!holding) return 0;
+    if (!holding || roundActive) return 0;     // thoughts aren't on the rope; it goes slack while a round is up
     const ax = targetPos.x - homePos.x, ay = targetPos.y - homePos.y, L = Math.hypot(ax, ay) || 1;
     const p = ((pointerPos.x - homePos.x) * ax + (pointerPos.y - homePos.y) * ay) / (L * L);
     return Math.pow(clamp(p, 0, 1), D.tensionCurve);
@@ -1011,18 +1007,30 @@
 
     // Hit test + progress.
     if (!held && !busy && !ringAnim) {
-      const d = Math.hypot(puckPos.x - targetPos.x, puckPos.y - targetPos.y);
-      const holder = stolen ? ringHolder() : null;
-      const was = onTarget; onTarget = d <= (stolen ? (holder && holder.moving ? 46 : 30) : D.tolerance);
-      if (onTarget && !was) buzz(10);
-      if (holding && onTarget) {
-        if (stolen) {
-          const t = ringHolder();
-          if (t) { const need = t.moving ? DISC_MS * 0.6 : DISC_MS; t.discMs += dt; t.circle.style.strokeDashoffset = 132 * (1 - Math.min(1, t.discMs / need)); if (t.discMs >= need) popThought(t); }
-        } else { progress = Math.min(1, progress + dt / holdMs()); if (progress >= 1) lockIn(); }
-      }
-      if (canSpawn()) {
-        focusMs += dt; if (!nextThoughtAt) scheduleThought(); if (focusMs >= nextThoughtAt) { spawnThought(); focusMs = 0; scheduleThought(); }
+      if (roundActive) {
+        // Any bubble under the lens fills; the others drain.
+        const near = nearestThought();
+        const hit = near && near.d <= (near.t.moving ? 46 : 30) ? near.t : null;
+        const was = onTarget; onTarget = !!hit;
+        if (onTarget && !was) buzz(10);
+        for (const t of thoughts) {
+          if (t === hit && holding) t.discMs += dt; else t.discMs = Math.max(0, t.discMs - dt * 2);
+          const need = t.moving ? DISC_MS * DISC_MS_MOVING : DISC_MS;
+          t.circle.style.strokeDashoffset = 132 * (1 - Math.min(1, t.discMs / need));
+          if (t.discMs >= need) { popThought(t); break; }
+        }
+        if (canSpawn()) { focusMs += dt; if (!nextThoughtAt) scheduleThought(); if (focusMs >= nextThoughtAt) { spawnThought(); focusMs = 0; scheduleThought(); } }
+        if (roundActive && curRound().timeLimit && performance.now() - roundStartAt > curRound().timeLimit) roundTimedOut();
+      } else {
+        const d = Math.hypot(puckPos.x - targetPos.x, puckPos.y - targetPos.y);
+        const was = onTarget; onTarget = d <= D.tolerance;
+        if (onTarget && !was) buzz(10);
+        if (holding && onTarget) {
+          if (scene === 'room' && !roundsDone()) {
+            // Steady hold on the Walkman brings on the next round.
+            focusMs += dt; if (focusMs >= ROUND_LEAD_MS) startRound();
+          } else { progress = Math.min(1, progress + dt / holdMs()); if (progress >= 1) lockIn(); }
+        } else if (scene === 'room') focusMs = 0;
       }
     }
 
