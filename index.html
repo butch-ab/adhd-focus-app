@@ -320,7 +320,8 @@
     const STEM_URLS = Object.fromEntries(KEYS.map(k => [k, `audio/stems/${k}.mp3`]));
     const BPM = 96, BEAT = 60 / BPM, BARS = 4, LOOP = BARS * 4 * BEAT;
     let ctx = null, master, sceneGain, sceneFilter, rainGain, stems = {}, started = false, muted = false, mode = 'synth';
-    let scene = 'concert', loopStart = 0, scheduled = 0, timer = null, wobbleTargets = {};
+    let scene = 'concert', loopStart = 0, scheduled = 0, timer = null;
+    let storm = null;   // the street and the room leaking in during the flood
 
     const N = { A2: 110, C3: 130.81, D3: 146.83, E3: 164.81, F3: 174.61, G3: 196, A3: 220, B3: 246.94, C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392, A4: 440, B4: 493.88, C5: 523.25, F2: 87.31, G2: 98, E2: 82.41 };
     const CHORDS = [[N.A3, N.C4, N.E4], [N.F3, N.A3, N.C4], [N.C4, N.E4, N.G4], [N.G3, N.B3, N.D4]];   // Am F C G
@@ -419,8 +420,80 @@
       } catch { return false; }
     }
 
-    // ---- Public --------------------------------------------------------------------------
     const ramp = (param, v, tc = 0.15) => { param.cancelScheduledValues(ctx.currentTime); param.setTargetAtTime(v, ctx.currentTime, tc); };
+    const rand = (a, b) => a + Math.random() * (b - a);
+
+    // ---- The storm: wind, traffic, and people talking, all synthesized ------------------------
+    function stormStart() {
+      if (storm) return;
+      const bus = ctx.createGain(); bus.gain.value = 0; bus.connect(master);
+      // Wind: brown noise, low-passed, swelling slowly and unevenly.
+      const wb = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate), wd = wb.getChannelData(0); let l = 0;
+      for (let i = 0; i < wd.length; i++) { const w = Math.random() * 2 - 1; wd[i] = (l + 0.02 * w) / 1.02; l = wd[i]; wd[i] *= 3.5; }
+      const wind = ctx.createBufferSource(); wind.buffer = wb; wind.loop = true;
+      const wlp = ctx.createBiquadFilter(); wlp.type = 'lowpass'; wlp.frequency.value = 420; wlp.Q.value = 0.8;
+      const wg = ctx.createGain(); wg.gain.value = 0.35;
+      const wlfo = ctx.createOscillator(); wlfo.frequency.value = 0.13; const wlg = ctx.createGain(); wlg.gain.value = 0.25;
+      const wlfo2 = ctx.createOscillator(); wlfo2.frequency.value = 0.31; const wlg2 = ctx.createGain(); wlg2.gain.value = 180;
+      wlfo.connect(wlg); wlg.connect(wg.gain); wlfo2.connect(wlg2); wlg2.connect(wlp.frequency);
+      wind.connect(wlp); wlp.connect(wg); wg.connect(bus); wind.start(); wlfo.start(); wlfo2.start();
+      const timers = [];
+      const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+      // A voice: bursts of syllables through a vowel-ish band-pass, a little pitch drift, placed somewhere in the room.
+      function talker() {
+        if (!storm) return;
+        const pan = ctx.createStereoPanner(); pan.pan.value = rand(-0.9, 0.9); pan.connect(bus);
+        const centre = rand(380, 1400), syll = Math.floor(rand(4, 12)), rate = rand(0.11, 0.17);
+        let t = ctx.currentTime + 0.05;
+        for (let i = 0; i < syll; i++) {
+          const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = centre * rand(0.8, 1.25); f.Q.value = rand(3, 7);
+          const f2 = ctx.createBiquadFilter(); f2.type = 'bandpass'; f2.frequency.value = centre * rand(1.8, 2.6); f2.Q.value = 5;
+          const g = ctx.createGain(); const n = ctx.createBufferSource();
+          const b = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * 0.2), ctx.sampleRate), d = b.getChannelData(0);
+          for (let k = 0; k < d.length; k++) d[k] = Math.random() * 2 - 1;
+          n.buffer = b; n.connect(f); n.connect(f2); f.connect(g); f2.connect(g); g.connect(pan);
+          const dur = rate * rand(0.5, 0.95);
+          g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(rand(0.12, 0.3), t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+          n.start(t); n.stop(t + dur + 0.02); t += rate * rand(0.8, 1.3);
+        }
+        later(talker, rand(150, 900));
+      }
+      // A car: a noise band that sweeps down as it passes, swelling then fading, crossing the stereo field.
+      function car() {
+        if (!storm) return;
+        const n = ctx.createBufferSource(); const b = ctx.createBuffer(1, ctx.sampleRate * 4, ctx.sampleRate), d = b.getChannelData(0);
+        for (let k = 0; k < d.length; k++) d[k] = Math.random() * 2 - 1;
+        n.buffer = b;
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.9;
+        const g = ctx.createGain(); const pan = ctx.createStereoPanner();
+        const t = ctx.currentTime, dur = rand(2.2, 3.6), dir = Math.random() < 0.5 ? 1 : -1;
+        bp.frequency.setValueAtTime(rand(700, 1100), t); bp.frequency.exponentialRampToValueAtTime(rand(220, 380), t + dur);
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(rand(0.35, 0.6), t + dur * 0.45); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        pan.pan.setValueAtTime(-dir, t); pan.pan.linearRampToValueAtTime(dir, t + dur);
+        n.connect(bp); bp.connect(g); g.connect(pan); pan.connect(bus); n.start(t); n.stop(t + dur + 0.05);
+        later(car, rand(1800, 5000));
+      }
+      // Odd knocks and clatter: short low thumps and a door somewhere.
+      function clatter() {
+        if (!storm) return;
+        const t = ctx.currentTime;
+        noise(t, rand(0.02, 0.06), 'lowpass', rand(180, 600), 1, rand(0.25, 0.5), bus);
+        if (Math.random() < 0.4) noise(t + rand(0.08, 0.2), rand(0.01, 0.03), 'bandpass', rand(1500, 4000), 3, rand(0.15, 0.3), bus);
+        later(clatter, rand(1200, 4500));
+      }
+      storm = { bus, timers, nodes: [wind, wlfo, wlfo2] };
+      talker(); later(talker, 500); later(talker, 1200); later(car, 600); later(clatter, 900);
+      ramp(bus.gain, 0.9, 1.5);
+    }
+    function stormStop(fast) {
+      if (!storm) return;
+      const s = storm; storm = null;
+      s.timers.forEach(clearTimeout);
+      ramp(s.bus.gain, 0.0001, fast ? 0.25 : 1.2);
+      setTimeout(() => { s.nodes.forEach(n => { try { n.stop(); } catch {} }); s.bus.disconnect(); }, fast ? 600 : 3000);
+    }
+
+    // ---- Public --------------------------------------------------------------------------
     async function start() {
       if (started) { if (ctx.state === 'suspended') ctx.resume(); return; }
       started = true; init();
@@ -440,11 +513,11 @@
       setScene(s) { scene = s; applyScene(); },
       hold(key) { if (!ctx) return; KEYS.forEach(k => { const on = !key || k === key; ramp(stems[k].gain.gain, on ? 1 : 0.25); ramp(stems[k].filter.frequency, on ? 20000 : 800); }); },
       walkmanHeld(on) { if (!ctx || scene !== 'concert' && !on) { applyScene(); return; } if (!ctx) return; ramp(sceneGain.gain, on ? 0.6 : 0.28, 0.5); ramp(sceneFilter.frequency, on ? 2600 : 1100, 0.5); },
-      flood(on) { if (!ctx || scene !== 'room') return; ramp(sceneGain.gain, on ? 0.16 : 0.28, 0.8); ramp(sceneFilter.frequency, on ? 700 : 1100, 0.8); },
+      flood(on) { if (!ctx) return; if (on && scene === 'room') { ramp(sceneGain.gain, 0.16, 0.8); ramp(sceneFilter.frequency, 700, 0.8); stormStart(); } else { if (scene === 'room') { ramp(sceneGain.gain, 0.28, 0.8); ramp(sceneFilter.frequency, 1100, 0.8); } stormStop(false); } },
       wobble(key, amount) { if (!ctx || !stems[key]) return; stems[key].lfoGain.gain.setTargetAtTime(amount * 0.006, ctx.currentTime, 0.05); },
       thought() { if (!ctx) return; noise(ctx.currentTime, 0.018, 'bandpass', 2400, 2, 0.35, master); },
-      ending() { if (!ctx) return; const t = ctx.currentTime; noise(t, 0.012, 'lowpass', 1200, 1, 0.5, master); noise(t + 0.09, 0.02, 'lowpass', 800, 1, 0.4, master); ramp(sceneGain.gain, 0.0001, 0.35); ramp(rainGain.gain, 0.16, 1.5); },
-      restart() { scene = 'concert'; applyScene(); this.hold(null); },
+      ending() { if (!ctx) return; stormStop(true); const t = ctx.currentTime; noise(t, 0.012, 'lowpass', 1200, 1, 0.5, master); noise(t + 0.09, 0.02, 'lowpass', 800, 1, 0.4, master); ramp(sceneGain.gain, 0.0001, 0.35); ramp(rainGain.gain, 0.16, 1.5); },
+      restart() { scene = 'concert'; stormStop(true); applyScene(); this.hold(null); },
       toggleMute() { muted = !muted; if (master) ramp(master.gain, muted ? 0 : 0.9, 0.05); return muted; },
       get muted() { return muted; },
     };
